@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Words ⇄ Expressions Helper</title>
+<style>
+  /* ===== Shared look from the Multiplication, Long Division, and Order of Operations guides ===== */
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 700px; margin: 0 auto; padding: 16px; background: #f8f9fa; color: #222; }
+  h1 { font-size: 1.4rem; text-align: center; margin-bottom: 0.5rem; }
+  .subtitle { text-align: center; color: #555; margin-bottom: 1.5rem; font-size: 0.95rem; }
+  button { font-size: 1.05rem; padding: 10px 20px; border: none; border-radius: 8px; background: #0066cc; color: white; cursor: pointer; min-height: 44px; font-family: inherit; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  button.secondary { background: #555; }
+  button.secondary:disabled { background: #ccc; color: #f4f4f4; }
+  button.big { font-size: 1.3rem; padding: 14px 36px; }
+  button.link { background: none; color: #0066cc; padding: 6px 4px; font-size: 1rem; min-height: 0; }
+  button.link:disabled { color: #aaa; background: none; }
+  .hidden { display: none !important; }
+  .step-box { background: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 18px 16px; margin: 14px 0; font-size: 1.15rem; line-height: 1.5; text-align: center; }
+  .step-box.gate { background: #e7f3ff; border: 3px solid #0066cc; }
+  .feedback { margin-top: 10px; font-weight: bold; min-height: 1.4em; font-size: 1.1rem; }
+  .feedback:empty { min-height: 0; margin: 0; }
+  .feedback.correct { color: #28a745; }
+  .feedback.coach { margin: 12px auto 0; max-width: 560px; background: #fff; border: 2px solid #f0ad4e; border-radius: 10px; padding: 12px 14px; font-size: 1.12rem; line-height: 1.5; text-align: left; font-weight: normal; color: #333; }
+  .controls { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .final-answer { background: #d4edda; border: 2px solid #28a745; border-radius: 10px; padding: 16px; text-align: center; font-size: 1.3rem; font-weight: bold; margin-top: 14px; }
+
+  /* ===== Start screen ===== */
+  .settings { background: white; border: 2px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .set-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0; justify-content: center; }
+  .set-label { font-weight: bold; font-size: 1.1rem; }
+  .seg { display: inline-flex; border: 2px solid #0066cc; border-radius: 10px; overflow: hidden; flex-wrap: wrap; }
+  .seg button { background: white; color: #0066cc; border-radius: 0; padding: 10px 18px; border-right: 1px solid #cfe2f7; }
+  .seg button:last-child { border-right: none; }
+  .seg button.on { background: #0066cc; color: white; font-weight: bold; }
+  .seg button small { display: block; font-size: 0.8rem; font-weight: normal; }
+  .level-example { text-align: center; color: #555; margin-top: 10px; font-size: 1rem; }
+  .level-example b { font-size: 1.25rem; color: #222; white-space: nowrap; }
+  .start-wrap { text-align: center; margin: 18px 0; }
+  .own { background: white; border: 2px solid #ddd; border-radius: 10px; padding: 14px 16px; margin-top: 8px; text-align: center; }
+  .own-title { font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; }
+  .own-row { display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .own-row input { font-size: 1.3rem; padding: 8px 12px; width: 320px; max-width: 70vw; border: 2px solid #ccc; border-radius: 8px; font-family: inherit; }
+  .own-row input:focus { outline: none; border-color: #0066cc; }
+  .own-help { color: #777; font-size: 0.85rem; margin-top: 8px; }
+  #ownMsg { color: #a35a00; font-weight: bold; }
+
+  /* ===== Main screen ===== */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .ptitle { font-size: 1.2rem; font-weight: bold; text-align: center; }
+  .stats { font-size: 0.95rem; color: #555; white-space: nowrap; min-width: 70px; text-align: right; }
+  .stats b { color: #222; }
+
+  /* the paper: every line the kid writes */
+  .paper { background: white; border: 2px solid #ddd; border-radius: 10px; padding: 10px 14px; margin: 10px 0 0;
+           overflow-x: auto; }
+  .paper-label { font-size: 0.8rem; color: #888; text-align: left; }
+  .line { text-align: center; font-size: 1.25rem; color: #8a939b; line-height: 34px; white-space: nowrap; border-bottom: 1px solid #dbe8f5; }
+  .line.cur { font-size: 2.1rem; color: #222; font-weight: bold; line-height: 1.7; padding: 4px 0; border-bottom: none; }
+  .expr sup { font-size: 0.6em; vertical-align: 0.9em; line-height: 0; }
+  .expr .gs { font-weight: bold; color: #333; }
+  .line:not(.cur) .gs { color: #8a939b; }
+  .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 3px; line-height: 1.05; font-size: 0.75em; }
+  .frac .fbar { border-top: 2px solid currentColor; width: 100%; margin: 2px 0; }
+  .x-scope { background: #fff3cd; box-shadow: 0 0 0 3px #ffc107; border-radius: 8px; }
+  .x-target { background: #e7f3ff; box-shadow: 0 0 0 3px #0066cc; border-radius: 8px; color: #0066cc; padding: 0 4px; animation: tpulse 1.1s ease-in-out infinite; }
+  .x-fresh { background: #e6f6ea; box-shadow: 0 0 0 3px #28a745; border-radius: 8px; color: #1e7e34; padding: 0 6px; display: inline-block; animation: pop 0.5s ease-out; }
+  .x-mark { text-decoration: underline wavy #0066cc; text-underline-offset: 6px; color: #5b7fa6; }
+  @keyframes tpulse { 0%,100% { box-shadow: 0 0 0 3px #0066cc; } 50% { box-shadow: 0 0 0 5px rgba(0,102,204,.35); } }
+  @keyframes pop { from { transform: scale(1.5); opacity: 0; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .x-target, .x-fresh { animation: none; } }
+
+  .ask { font-size: 1.4rem; margin: 0 0 8px; }
+  .ask b { color: #0066cc; font-size: 1.5rem; white-space: nowrap; }
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+  .choice { background: white; color: #0066cc; border: 2px solid #0066cc; font-size: 1.15rem; padding: 10px 16px; min-width: 150px; display: inline-flex; align-items: center; gap: 10px; justify-content: center; }
+  .choice .sym { font-weight: bold; font-size: 1.4rem; min-width: 1.6em; }
+  .choice:hover:not(:disabled) { background: #f2f8ff; }
+  .choice.wrong, .choice.wrong:disabled { background: #fff4e5; color: #a35a00; border-color: #f0ad4e; cursor: default; }
+  .choice.right { background: #28a745; color: white; border-color: #28a745; }
+  .input-area { margin-top: 10px; display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .work { font-size: 1.9rem; font-weight: bold; white-space: nowrap; }
+  .input-area input { font-size: 1.8rem; width: 130px; padding: 6px 10px; border: 2px solid #ccc; border-radius: 8px; text-align: center; font-family: inherit; font-weight: bold; }
+  .input-area input:focus { outline: none; border-color: #0066cc; }
+  button.check { font-size: 1.25rem; padding: 12px 28px; }
+  button.yn { font-size: 1.5rem; padding: 14px 40px; min-width: 130px; }
+  .tries { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .try { background: #fff4e5; border: 1px solid #f0ad4e; color: #a35a00; border-radius: 8px; padding: 0 8px; font-weight: bold; }
+  .hints { margin: 12px auto 0; max-width: 560px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
+  .hintline { background: #fffdf3; border: 1px dashed #d4a017; border-radius: 8px; padding: 8px 12px; font-size: 1.05rem; }
+  .tag { display: inline-block; background: #856404; color: white; border-radius: 999px; font-size: 0.75rem; padding: 1px 8px; margin-right: 6px; vertical-align: 2px; text-transform: uppercase; letter-spacing: .03em; }
+  .gate-head { font-size: 1.45rem; font-weight: bold; color: #0066cc; }
+  .gate-text { font-size: 1.2rem; margin: 6px 0 4px; }
+  .gate-line { font-size: 2rem; font-weight: bold; background: white; border-radius: 10px; border: 2px dashed #9cc3ea; display: inline-block; padding: 4px 18px; margin: 6px 0; white-space: nowrap; max-width: 100%; overflow-x: auto; box-sizing: border-box; }
+  .gate-note { color: #555; font-size: 1rem; }
+  .gate-check { display: flex; align-items: center; justify-content: center; gap: 12px; max-width: 340px; margin: 12px auto 0; padding: 12px 14px; background: white; border: 2px solid #0066cc; border-radius: 10px; cursor: pointer; font-size: 1.25rem; font-weight: bold; color: #0066cc; user-select: none; }
+  .gate-check:hover { background: #f2f8ff; }
+  .gate-check input { width: 32px; height: 32px; accent-color: #28a745; cursor: pointer; flex: none; }
+  .did { color: #28a745; font-weight: bold; margin-bottom: 6px; font-size: 1.15rem; }
+  .mini-note { color: #777; font-size: 0.95rem; margin-top: 8px; }
+  .quick { background: white; border: 2px solid #ddd; border-radius: 10px; padding: 10px 14px; margin: 8px auto; max-width: 560px; font-size: 1.15rem; }
+  .yourans { font-size: 1.2rem; margin: 6px 0; }
+  .yourans b { font-size: 1.8rem; color: #0066cc; }
+  .reason-ok { display: inline-flex; align-items: center; gap: 10px; margin-top: 10px; color: #1e7e34; font-size: 1.1rem; font-weight: normal; }
+  .big-check { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: #28a745; color: white; font-size: 1.5rem; }
+  #hintBtn.auto { background: #ffc107; color: #3d2e00; font-weight: bold; }
+  #hintBtn.faded { background: white; color: #856404; border: 2px solid #e0c46c; }
+  .progress-wrap { margin: 10px auto 0; max-width: 420px; }
+  .bar { height: 10px; background: #e3e7eb; border-radius: 999px; overflow: hidden; }
+  .bar > div { height: 100%; background: #28a745; border-radius: 999px; transition: width .3s; }
+  .progress { text-align: center; color: #666; margin-top: 4px; font-size: 0.85rem; }
+  .solution { background: #f1f3f5; border: 2px solid #adb5bd; border-radius: 10px; padding: 14px 16px; margin-top: 14px; text-align: center; }
+  .solution h3 { margin: 0 0 6px; font-size: 1.2rem; }
+  .sol-row { display: flex; justify-content: center; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 4px 0; border-bottom: 1px solid #dee2e6; }
+  .sol-row .expr { font-size: 1.4rem; font-weight: bold; white-space: nowrap; }
+  .sol-row small { color: #555; font-size: 0.95rem; }
+  .sol-note { color: #555; margin: 10px 0 4px; }
+  .faded-note { color: #856404; font-size: 0.95rem; font-weight: normal; margin-top: 8px; }
+  @media (max-width: 520px) {
+    body { padding: 10px; }
+    .line.cur { font-size: 1.6rem; } .gate-line { font-size: 1.5rem; padding: 4px 8px; } .work { font-size: 1.5rem; }
+    .choice { min-width: 130px; font-size: 1.05rem; padding: 8px 10px; }
+    .ask { font-size: 1.2rem; } .stats { font-size: 0.85rem; min-width: 0; }
+    button.yn { padding: 12px 28px; min-width: 100px; }
+  }
+
+  /* ===== Words ⇄ Expressions ===== */
+  .problem { background: white; border: 2px solid #9cc3ea; border-radius: 10px; padding: 10px 14px 12px; margin: 10px 0 0; text-align: center; }
+  .problem-label { font-size: 0.8rem; color: #888; text-align: left; }
+  .words { font-size: 1.45rem; line-height: 2.1; color: #222; }
+  .problem .expr-big { font-size: 2.1rem; font-weight: bold; line-height: 1.7; white-space: nowrap; overflow-x: auto; }
+  .x-done { background: #e6f6ea; box-shadow: 0 0 0 2px #9fd8ad; border-radius: 6px; color: #1e7e34; }
+  .words .x-target { padding: 2px 4px; }
+  .words .x-done { padding: 1px 2px; }
+  .ordw { display: inline-block; color: #0066cc; font-weight: bold; font-size: 1.1rem; margin-right: 2px; }
+  sup.ord { color: #0066cc; font-size: 0.55em; font-weight: bold; margin-left: 1px; }
+  sup.pw { font-size: 0.6em; vertical-align: 0.9em; line-height: 0; }
+  .v { font-style: italic; font-family: Georgia, "Times New Roman", serif; }
+  .line.wline { white-space: normal; font-size: 1.05rem; line-height: 1.5; padding: 4px 0; }
+  .line.cur.wline { font-size: 1.3rem; line-height: 1.5; }
+  .paper-empty { color: #aaa; font-size: 0.95rem; padding: 6px 0; text-align: center; }
+  .hlw { background: #e7f3ff; box-shadow: 0 0 0 2px #0066cc; border-radius: 6px; padding: 0 4px; color: #0066cc; }
+  .ask small { display: block; font-size: 0.95rem; color: #666; margin-top: 2px; }
+  .choice .ch { font-size: 1.3rem; font-weight: bold; white-space: nowrap; }
+  .choices.stack { flex-direction: column; align-items: stretch; max-width: 560px; margin-left: auto; margin-right: auto; }
+  .choices.stack .choice { justify-content: flex-start; text-align: left; font-size: 1.12rem; line-height: 1.35; }
+  .choices.stack .choice .ch { white-space: normal; font-size: 1.15rem; font-weight: normal; }
+  .choices.stack .choice.mc .ch { font-size: 1.35rem; font-weight: bold; }
+  .choice .letter { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; border: 2px solid currentColor; font-weight: bold; font-size: 1rem; }
+  .choice .mark { flex: none; font-weight: bold; min-width: 1.2em; }
+  .gate-line.wline { white-space: normal; font-size: 1.4rem; line-height: 1.5; }
+  .sense { background: white; border: 2px solid #ddd; border-radius: 10px; padding: 10px 14px; margin: 8px auto; max-width: 600px; text-align: left; }
+  .sense-row { margin: 6px 0; }
+  .sense-row .lbl { font-size: 0.85rem; color: #777; display: block; }
+  .sense-row .words { font-size: 1.2rem; line-height: 1.9; }
+  .sense-row .expr { font-size: 1.7rem; font-weight: bold; }
+  .sense-note { color: #555; font-size: 0.98rem; margin-top: 6px; }
+  .walk { margin-top: 12px; }
+  .sol-row .wtxt { font-size: 1.05rem; }
+  .pair-final { font-size: 1.15rem; font-weight: normal; margin: 6px 0; }
+  .pair-final .expr { font-size: 1.7rem; font-weight: bold; }
+  @media (max-width: 520px) {
+    .words { font-size: 1.2rem; } .problem .expr-big { font-size: 1.6rem; }
+    .gate-line.wline { font-size: 1.15rem; } .choices.stack .choice { font-size: 1rem; }
+    .seg button { padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= START SCREEN ================= -->
+<section id="startScreen">
+  <h1>Words ⇄ Expressions</h1>
+  <p class="subtitle">✏️ Get your pencil and paper ready. Write each piece as you go.</p>
+
+  <div class="settings">
+    <div class="set-row">
+      <span class="set-label">Translate</span>
+      <div class="seg" id="segDir">
+        <button data-v="w2e">Words → Expression</button>
+        <button data-v="e2w">Expression → Words</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="set-label">Level</span>
+      <div class="seg" id="segLevel">
+        <button data-v="1">Level 1<small>sum, product…</small></button>
+        <button data-v="2">Level 2<small>grouping</small></button>
+        <button data-v="3">Level 3<small>variables, test style</small></button>
+      </div>
+    </div>
+    <div class="level-example" id="levelExample"></div>
+  </div>
+
+  <div class="start-wrap">
+    <button class="big" id="startBtn" onclick="startPractice()">Start ▶</button>
+  </div>
+
+  <div class="own">
+    <div class="own-title">Try your own problem</div>
+    <div class="own-row">
+      <input id="customExpr" autocomplete="off" spellcheck="false" aria-label="Your problem" placeholder="like 5 less than twice n" onkeydown="if(event.key==='Enter') startCustom()">
+      <button id="goBtn" onclick="startCustom()">Go</button>
+    </div>
+    <div id="ownMsg" class="feedback" aria-live="polite"></div>
+    <div class="own-help">Type or paste <b>words</b> (like <i>the sum of 8 and 3, then multiplied by 6</i>) or an <b>expression</b> (like <i>3 × (n + 5)</i>).<br>You can type <b>*</b> or <b>x</b> for ×, and <b>/</b> for ÷.</div>
+  </div>
+</section>
+
+<!-- ================= MAIN SCREEN ================= -->
+<section id="mainScreen" class="hidden">
+  <div class="topbar">
+    <button class="link" onclick="showStart()">← Menu</button>
+    <div class="ptitle" id="ptitle"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+  <div class="problem" id="problem"></div>
+  <div class="paper" id="paper"></div>
+  <div id="step" class="step-box" aria-live="polite"></div>
+  <div id="final" class="final-answer hidden"></div>
+  <div id="solution" class="solution hidden"></div>
+  <div class="controls" id="controls">
+    <button id="backBtn" class="secondary" onclick="goBack()">← Back</button>
+    <button id="hintBtn" onclick="tapHint()">💡 Hint</button>
+    <button id="solBtn" class="link" onclick="showSolution()">Show me the whole solution</button>
+  </div>
+  <div class="progress-wrap"><div class="bar"><div id="bar"></div></div><div id="progress" class="progress"></div></div>
+</section>
+
+<!-- ============ PURE LOGIC (tested by test.js; no DOM in here) ============ -->
+<script id="logic">
+"use strict";
+/* ===================== basics ===================== */
+class KidErr extends Error { constructor(m) { super(m); this.kid = true; } }
+const kid = m => new KidErr(m);
+let NID = 0;
+const PREC = { "+": 1, "-": 1, "*": 2, "/": 2, "^": 3 };
+const SYM = { "+": "+", "-": "−", "*": "×", "/": "÷", "^": "^" };
+const OPS4 = ["+", "-", "*", "/"];
+const COMM = o => o === "+" || o === "*";
+function bgcd(a, b) { if (a < 0n) a = -a; if (b < 0n) b = -b; while (b) { [a, b] = [b, a % b]; } return a || 1n; }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+
+// numbers are kept as tidy strings: "8", "-3", "2.5", "3/4"
+function normNum(s) {
+  s = String(s).replace(/[−–]/g, "-");
+  let neg = false; if (s[0] === "-") { neg = true; s = s.slice(1); }
+  if (s.includes("/")) { let [a, b] = s.split("/"); a = a.replace(/^0+(?=\d)/, ""); b = b.replace(/^0+(?=\d)/, ""); return (neg ? "-" : "") + a + "/" + b; }
+  let [i, f = ""] = s.split(".");
+  i = (i || "0").replace(/^0+(?=\d)/, ""); f = f.replace(/0+$/, "");
+  const t = f ? i + "." + f : i;
+  return (neg && !/^0$/.test(t) ? "-" : "") + t;
+}
+function numKey(v) { // exact rational key, so 0.5 = 1/2 and 08 = 8
+  let neg = v[0] === "-"; if (neg) v = v.slice(1);
+  let n, d;
+  if (v.includes("/")) { const [a, b] = v.split("/"); n = BigInt(a); d = BigInt(b); }
+  else { const [i, f = ""] = v.split("."); n = BigInt((i || "0") + f); d = 10n ** BigInt(f.length); }
+  if (d === 0n) return "nan:" + v;
+  const g = bgcd(n, d); n /= g; d /= g;
+  return (neg && n !== 0n ? "-" : "") + n + "/" + d;
+}
+function numText(v, html) {
+  const neg = v[0] === "-", a = neg ? v.slice(1) : v;
+  if (a.includes("/")) {
+    const [p, q] = a.split("/");
+    return (neg ? "−" : "") + (html ? `<span class="frac"><span>${p}</span><span class="fbar"></span><span>${q}</span></span>` : p + "/" + q);
+  }
+  return (neg ? "−" : "") + a;
+}
+const numWords = v => (v[0] === "-" ? "negative " + v.slice(1) : v);
+
+const N = v => ({ t: "num", v: normNum(v), id: ++NID });
+const V = name => ({ t: "var", name, id: ++NID });
+const lift = x => typeof x === "object" ? x : (typeof x === "string" && /^[a-z]$/.test(x) ? V(x) : N(x));
+function B(op, l, r, style, swap) { return { t: "bin", op, l: lift(l), r: lift(r), style, swap: !!swap, id: ++NID }; }
+const isLeaf = n => n.t !== "bin";
+const isNumV = (n, v) => n.t === "num" && n.v === String(v);
+const isNeg = n => n.t === "num" && n.v[0] === "-";
+function clone(n, fresh) {
+  const c = Object.assign({}, n); if (fresh) c.id = ++NID;
+  if (n.t === "bin") { c.l = clone(n.l, fresh); c.r = clone(n.r, fresh); }
+  return c;
+}
+function walk(n, f) { if (n.t === "bin") { walk(n.l, f); walk(n.r, f); } f(n); } // post-order: left, right, node
+function opsInOrder(n) { const a = []; walk(n, x => { if (x.t === "bin") a.push(x); }); return a; }
+function nodeMap(n) { const m = {}; walk(n, x => { m[x.id] = x; }); return m; }
+function countOps(n) { return opsInOrder(n).length; }
+function replaceIn(n, id, rep) {
+  if (n.id === id) return rep;
+  if (n.t !== "bin") return n;
+  const l = replaceIn(n.l, id, rep), r = replaceIn(n.r, id, rep);
+  return l === n.l && r === n.r ? n : Object.assign({}, n, { l, r });
+}
+// tree in the order it is written (× and + may be flipped by the student)
+const kids = n => (n.swap && COMM(n.op) ? [n.r, n.l] : [n.l, n.r]);
+function dispTree(n) {
+  if (n.t !== "bin") return Object.assign({}, n);
+  const [a, b] = kids(n);
+  return Object.assign({}, n, { l: dispTree(a), r: dispTree(b), swap: false });
+}
+
+/* ===================== same meaning? ===================== */
+// + and × may swap; parentheses that change nothing are fine; − and ÷ keep their order.
+function canon(n) {
+  if (n.t === "num") return "#" + numKey(n.v);
+  if (n.t === "var") return "v:" + n.name;
+  if (n.op === "^") return "^(" + canon(n.l) + "," + canon(n.r) + ")";
+  if (n.op === "+" || n.op === "-") {
+    const terms = []; addTerms(n, 1, terms);
+    return "A[" + terms.sort().join(",") + "]";
+  }
+  const f = []; mulTerms(n, 1, f);
+  return "M[" + f.sort().join(",") + "]";
+}
+function addTerms(n, sg, out) {
+  if (n.t === "bin" && n.op === "+") { addTerms(n.l, sg, out); addTerms(n.r, sg, out); }
+  else if (n.t === "bin" && n.op === "-") { addTerms(n.l, sg, out); out.push((sg > 0 ? "-" : "+") + canon(n.r)); }
+  else out.push((sg > 0 ? "+" : "-") + canon(n));
+}
+function mulTerms(n, sg, out) {
+  if (n.t === "bin" && n.op === "*") { mulTerms(n.l, sg, out); mulTerms(n.r, sg, out); }
+  else if (n.t === "bin" && n.op === "/") { mulTerms(n.l, sg, out); out.push((sg > 0 ? "/" : "*") + canon(n.r)); }
+  else out.push((sg > 0 ? "*" : "/") + canon(n));
+}
+const same = (a, b) => canon(a) === canon(b);
+
+/* ===================== writing an expression ===================== */
+const CIRC = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+const SUPD = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+function needP(c, p, side, lead) {
+  if (c.t === "num") return isNeg(c) && (side === "r" || !lead || p.op === "^");
+  if (c.t !== "bin") return false;
+  if (c.paren) return true;
+  if (p.op === "^") return side === "l";
+  if (PREC[c.op] < PREC[p.op]) return true;
+  return PREC[c.op] === PREC[p.op] && side === "r";
+}
+// o: { html, target, done:Set, badges:Map, fresh }
+function R(n, o, lead) {
+  if (n.t === "num") return numText(n.v, o.html);
+  if (n.t === "var") return o.html ? `<span class="v">${n.name}</span>` : n.name;
+  const [a, b] = kids(n);
+  const sub = (c, side) => {
+    const p = needP(c, n, side, lead);
+    let s = R(c, o, p ? true : (side === "l" ? lead : false));
+    if (p) {
+      const plain = o.html ? R(c, {}, true) : s;
+      const [op, cl] = c.t !== "bin" ? ["(", ")"] : /\[/.test(plain) ? ["{", "}"] : /\(/.test(plain) ? ["[", "]"] : ["(", ")"];
+      s = op + s + cl;
+    }
+    return W(c, s, o);
+  };
+  const badge = o.html && o.badges && o.badges.get(n.id) ? `<sup class="ord">${CIRC[o.badges.get(n.id)]}</sup>` : "";
+  if (n.op === "^") {
+    const e = R(b, {}, true);
+    return sub(a, "l") + (o.html ? `<sup class="pw">${e}</sup>${badge}` : e.split("").map(ch => SUPD[ch] || ch).join(""));
+  }
+  return `${sub(a, "l")} ${SYM[n.op]}${badge} ${sub(b, "r")}`;
+}
+function W(n, s, o) {
+  if (!o.html) return s;
+  const cls = o.fresh === n.id ? "x-fresh" : o.target === n.id ? "x-target" : o.done && o.done.has(n.id) ? "x-done" : "";
+  return cls ? `<span class="${cls}">${s}</span>` : s;
+}
+const exprText = n => R(n, {}, true);
+const exprHTML = (n, o) => { o = Object.assign({ html: true }, o || {}); return W(n, R(n, o, true), o); };
+
+/* ===================== saying it in words ===================== */
+const NOUN = { "+": "sum", "-": "difference", "*": "product", "/": "quotient" };
+const INF = { "+": "plus", "-": "minus", "*": "times", "/": "divided by" };
+const THEN = { "+": "increased by", "-": "decreased by", "*": "multiplied by", "/": "divided by" };
+const VERB = { "+": "add", "-": "subtract", "*": "multiply by", "/": "divide by" };
+const ATOMIC = new Set(["of", "twice", "double", "triple", "half"]);
+function validStyle(n, st) {
+  const o = n.op, b4 = OPS4.includes(o);
+  switch (st) {
+    case "of": case "inf": case "cmd": case "flat": return b4;
+    case "then": case "thenv": return b4 && !isLeaf(n.l);
+    case "from": case "less": case "decr": return o === "-";
+    case "more": case "incr": return o === "+";
+    case "twice": case "double": return o === "*" && isNumV(n.l, 2);
+    case "triple": return o === "*" && isNumV(n.l, 3);
+    case "half": return o === "/" && isNumV(n.r, 2);
+  }
+  return false;
+}
+function defaultStyle(n) { if (isLeaf(n.l) && isLeaf(n.r)) return "of"; if (!isLeaf(n.l)) return "then"; return "inf"; }
+function useStyle(n, ctx) {
+  if (n.op === "^") return ctx === "lead" ? "pow" : "powof";
+  if (ctx === "flatin") return "flat";
+  let st = n.style && validStyle(n, n.style) ? n.style : defaultStyle(n);
+  if (ctx !== "lead" && !ATOMIC.has(st)) st = "of";
+  return st;
+}
+const ord = k => k + (k % 100 >= 11 && k % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][k % 10] || "th");
+// PH writes word tokens {w, o:ownerId}; sp[id] = [start, end); cx[id] = {ctx, st}
+function PH(n, ctx, out, sp, cx) {
+  const s0 = out.length;
+  const T = str => { for (const w of str.split(" ")) out.push({ w, o: n.id }); };
+  const C = (c, k) => PH(c, k, out, sp, cx);
+  if (n.t === "num") T(numWords(n.v));
+  else if (n.t === "var") T(n.name);
+  else {
+    const st = useStyle(n, ctx), o = n.op; cx[n.id] = { ctx, st };
+    switch (st) {
+      case "of": T(`the ${NOUN[o]} of`); C(n.l, "atom"); T("and"); C(n.r, "atom"); break;
+      case "inf": C(n.l, "atom"); T(INF[o]); C(n.r, "atom"); break;
+      case "then": C(n.l, "lead"); T(","); T("then " + THEN[o]); C(n.r, "atom"); break;
+      case "thenv": C(n.l, "lead"); T(","); T("then " + VERB[o]); C(n.r, "atom"); break;
+      case "cmd": case "from":
+        if (o === "+") { T("add"); C(n.l, "atom"); T("and"); C(n.r, "atom"); }
+        else if (o === "-") { T("subtract"); C(n.r, "atom"); T("from"); C(n.l, "atom"); }
+        else if (o === "*") { T("multiply"); C(n.l, "atom"); T("by"); C(n.r, "atom"); }
+        else { T("divide"); C(n.l, "atom"); T("by"); C(n.r, "atom"); }
+        break;
+      case "more": C(n.r, "atom"); T("more than"); C(n.l, "atom"); break;
+      case "less": C(n.r, "atom"); T("less than"); C(n.l, "atom"); break;
+      case "incr": C(n.l, "atom"); T("increased by"); C(n.r, "atom"); break;
+      case "decr": C(n.l, "atom"); T("decreased by"); C(n.r, "atom"); break;
+      case "twice": case "double": case "triple": T(st); C(n.r, "atom"); break;
+      case "half": T("half of"); C(n.l, "atom"); break;
+      case "flat": {
+        const side = (c, s) => c.t === "bin" && c.op !== "^" && (PREC[c.op] > PREC[o] || (PREC[c.op] === PREC[o] && s === "l")) ? "flatin" : "atom";
+        C(n.l, side(n.l, "l")); T(INF[o]); C(n.r, side(n.r, "r")); break;
+      }
+      case "pow": {
+        const k = n.r.t === "num" ? n.r.v : null, comp = !isLeaf(n.l);
+        C(n.l, comp ? "lead" : "atom"); if (comp) T(",");
+        if (k === "2") { T("squared"); C(n.r, "none"); } else if (k === "3") { T("cubed"); C(n.r, "none"); }
+        else { T("to the power of"); C(n.r, "atom"); }
+        break;
+      }
+      case "powof": {
+        const k = n.r.t === "num" ? n.r.v : null;
+        if (k === "2") T("the square of"); else if (k === "3") T("the cube of"); else T(`the ${ord(+k)} power of`);
+        C(n.r, "none"); C(n.l, "atom"); break;
+      }
+    }
+  }
+  if (ctx === "none") out.length = s0; // exponent already said by "squared" / "the square of"
+  sp[n.id] = [s0, out.length];
+}
+function phrase(tree, ctx) { const toks = [], sp = {}, cx = {}; PH(tree, ctx || "lead", toks, sp, cx); return { toks, sp, cx }; }
+function joinWords(ws) { return ws.join(" ").replace(/ ,/g, ","); }
+const phraseText = (tree, ctx) => joinWords(phrase(tree, ctx).toks.map(t => t.w));
+
+/* ===================== reading a word phrase ===================== */
+const ONES = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
+const TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+const VOCAB = new Set(("the a an of and between sum total difference product quotient plus minus times multiplied multiply by divided divide " +
+  "add added to subtract subtracted from take taken away more less fewer than increased decreased reduced then twice double doubled " +
+  "triple tripled thrice half halved quantity squared cubed square cube power negative number").split(" "));
+const FILLER_START = [
+  "write an expression that shows", "write an expression to show", "write an expression to represent", "write an expression for", "write the expression for",
+  "write an expression", "write the expression", "write", "what is", "what's", "find the value of", "find", "evaluate", "translate", "show", "calculate", "compute", "start with", "begin with"];
+const DROPSEQ = [["the", "result", "of"], ["the", "answer", "of"], ["the", "result"], ["the", "answer"], ["result"], ["it"], ["that"], ["this"], ["please"]];
+function wordList(s) { return s.split(" ").filter(Boolean); }
+function lexWords(raw) {
+  let s = " " + String(raw).toLowerCase() + " ";
+  s = s.replace(/[“”"«»]/g, " ").replace(/[’‘`]/g, "'").replace(/what's/g, "what is");
+  s = s.replace(/(\d{1,3}(?:,\d{3})+)(?!\d)/g, m => m.replace(/,/g, ""));
+  s = s.replace(/[−–—]/g, "-").replace(/([a-z])-(?=[a-z])/g, "$1 ");
+  s = s.replace(/[×*·∙]/g, " times ").replace(/÷/g, " divided by ").replace(/\+/g, " plus ").replace(/²/g, " squared ").replace(/³/g, " cubed ");
+  const parts = s.match(/\d+(?:st|nd|rd|th)\b|\d+\.\d*|\.\d+|\d+(?:\/\d+)?|[a-z]+|[,()\[\]{}=\-\/]|[^\s]/g) || [];
+  let t = [];
+  for (const p of parts) {
+    if (/^\d+(st|nd|rd|th)$/.test(p)) t.push({ k: "ord", v: parseInt(p) });
+    else if (/^[\d.]/.test(p) && /\d/.test(p)) t.push({ k: "num", v: normNum(p.replace(/\.$/, "")) });
+    else if (/^[a-z]+$/.test(p)) t.push({ k: "w", w: p });
+    else if (p === ",") t.push({ k: "," });
+    else if ("([{".includes(p)) t.push({ k: "(" });
+    else if (")]}".includes(p)) t.push({ k: ")" });
+    else if (p === "-") t.push({ k: "-" });
+    else if (p === "/") { t.push({ k: "w", w: "divided" }, { k: "w", w: "by" }); }
+    else if (p === "=") t.push({ k: "=" });
+    else if (".?!:;".includes(p)) continue;
+    else throw kid(`I don't know the symbol “${p}”. Try writing it in words, or type the expression instead.`);
+  }
+  const isW = (i, w) => t[i] && t[i].k === "w" && t[i].w === w;
+  // equations are not expressions
+  if (t.some((x, i) => x.k === "=" || (x.k === "w" && (x.w === "equals" || x.w === "equal" || (x.w === "is" && i > 1)))))
+    throw kid("That looks like an equation (it has “is”, “equals”, or =). Type just the expression part, like “5 more than n”.");
+  // instructions at the start ("write an expression for …")
+  for (let again = true; again;) {
+    again = false;
+    for (const f of FILLER_START) {
+      const ws = wordList(f);
+      if (ws.every((w, i) => isW(i, w))) { t = t.slice(ws.length); again = true; break; }
+    }
+  }
+  t = t.filter(x => !(x.k === "w" && x.w === "is"));
+  if (t[0] && t[0].k === "w" && t[0].w === "take" && t[1] && t[1].k === "w" && t[1].w === "the") t = t.slice(1);
+  // number words → numbers ("twenty five", "one hundred")
+  const out = [];
+  for (let i = 0; i < t.length; i++) {
+    const x = t[i];
+    if (x.k === "w" && (x.w in ONES || x.w in TENS) && !(x.w === "one" && isW(i + 1, "half"))) {
+      let total = 0, cur = 0, j = i;
+      for (; j < t.length && t[j].k === "w"; j++) {
+        const w = t[j].w;
+        if (w in ONES) cur += ONES[w]; else if (w in TENS) cur += TENS[w];
+        else if (w === "hundred") cur = (cur || 1) * 100; else if (w === "thousand") { total += (cur || 1) * 1000; cur = 0; }
+        else break;
+      }
+      out.push({ k: "num", v: String(total + cur) }); i = j - 1; continue;
+    }
+    if (x.k === "w" && x.w === "one" && isW(i + 1, "half")) continue;
+    out.push(x);
+  }
+  t = out;
+  // signs: "-" between things is minus; in front of a number it is negative
+  const res = [];
+  for (let i = 0; i < t.length; i++) {
+    const x = t[i], prev = res[res.length - 1];
+    if (x.k === "-") {
+      const prevThing = prev && (prev.k === "num" || prev.k === "var" || prev.k === ")" || (prev.k === "w" && /^[a-z]$/.test(prev.w) && prev.w !== "a"));
+      if (!prevThing && t[i + 1] && t[i + 1].k === "num") { res.push({ k: "num", v: normNum("-" + t[i + 1].v) }); i++; }
+      else res.push({ k: "w", w: "minus" });
+      continue;
+    }
+    if (x.k === "w" && x.w === "negative" && t[i + 1] && t[i + 1].k === "num") { res.push({ k: "num", v: normNum("-" + t[i + 1].v) }); i++; continue; }
+    res.push(x);
+  }
+  t = res;
+  // "a number", "a number n", single letters as variables; "x" between numbers means times
+  const fin = [];
+  for (let i = 0; i < t.length; i++) {
+    const x = t[i], nx = t[i + 1];
+    if (x.k === "w" && ["a", "some", "any", "the", "an"].includes(x.w) && nx && nx.k === "w" && nx.w === "number") {
+      const nn = t[i + 2]; let name = "n", txt = x.w + " number", skip = 1;
+      if (nn && nn.k === "w" && /^[a-z]$/.test(nn.w) && nn.w !== "a") { name = nn.w; txt += " " + nn.w; skip = 2; }
+      fin.push({ k: "var", name, txt }); i += skip; continue;
+    }
+    if (x.k === "w" && x.w === "number") { const nn = t[i + 1]; if (nn && nn.k === "w" && /^[a-z]$/.test(nn.w) && nn.w !== "a") { fin.push({ k: "var", name: nn.w, txt: "number " + nn.w }); i++; } else fin.push({ k: "var", name: "n", txt: "number" }); continue; }
+    if (x.k === "w" && x.w === "x" && fin.length && fin[fin.length - 1].k === "num" && nx && nx.k === "num") { fin.push({ k: "w", w: "times" }); continue; }
+    if (x.k === "w" && /^[a-z]$/.test(x.w) && x.w !== "a") { fin.push({ k: "var", name: x.w, txt: x.w }); continue; }
+    if (x.k === "w" && x.w === "a") { if (!(nx && nx.k === "w" && ["quantity", "half", "total", "sum", "difference", "product", "quotient", "square", "cube"].includes(nx.w))) fin.push({ k: "var", name: "a", txt: "a" }); continue; }
+    fin.push(x);
+  }
+  t = fin;
+  // little words that don't change the math
+  for (const sq of DROPSEQ) {
+    for (let i = 0; i < t.length; i++) if (sq.every((w, j) => t[i + j] && t[i + j].k === "w" && t[i + j].w === w)) { t.splice(i, sq.length); i--; }
+  }
+  // "and then" → "then"; trailing "to"/"from" after "add 5 to (it)"
+  t = t.filter((x, i) => !(x.k === "w" && x.w === "and" && t[i + 1] && t[i + 1].k === "w" && t[i + 1].w === "then"));
+  t = t.filter((x, i) => !(x.k === "w" && (x.w === "to" || x.w === "from") && (!t[i + 1] || t[i + 1].k === ",")));
+  t = t.filter((x, i) => !(x.k === "w" && x.w === "an"));
+  while (t.length && t[t.length - 1].k === ",") t.pop();
+  while (t.length && t[0].k === ",") t.shift();
+  const unknown = [...new Set(t.filter(x => x.k === "w" && !VOCAB.has(x.w)).map(x => x.w))];
+  if (unknown.length) throw kid(`I don't know the word${unknown.length > 1 ? "s" : ""} ${unknown.slice(0, 3).map(w => "“" + w + "”").join(", ")} yet. Try rewording it (like “the sum of 8 and 3” or “5 less than n”), or type the expression instead.`);
+  for (const x of t) x.txt = x.txt || (x.k === "num" ? numText(x.v) : x.k === "w" ? x.w : x.k === "ord" ? ord(x.v) : x.k === "(" ? "(" : x.k === ")" ? ")" : x.k);
+  return t;
+}
+
+function parseWords(raw) {
+  const t = lexWords(raw), L = t.length, CAP = 60, memo = new Map();
+  if (!L) throw kid("Type or paste a problem first.");
+  if (!t.some(x => x.k === "num" || x.k === "var")) throw kid("I don't see any numbers or variables in that. Add the numbers from your problem.");
+  const isW = (p, w) => t[p] && t[p].k === "w" && t[p].w === w;
+  const seq = (p, str) => { const ws = wordList(str); return ws.every((w, i) => isW(p + i, w)) ? p + ws.length : -1; };
+  const M = (k, p, f) => { const key = k + "@" + p; if (memo.has(key)) return memo.get(key); memo.set(key, []); const r = f().slice(0, CAP); memo.set(key, r); return r; };
+  const nb = (op, l, r, s, e, style, swap) => ({ t: "bin", op, l, r, s, e, style, swap: !!swap });
+  const syn = (v, p) => ({ t: "num", v: String(v), s: p, e: p });
+  function Atom(p) {
+    return M("A", p, () => {
+      const out = [], x = t[p]; if (!x) return out;
+      if (x.k === "num") out.push({ n: { t: "num", v: x.v, s: p, e: p + 1 }, e: p + 1 });
+      if (x.k === "var") out.push({ n: { t: "var", name: x.name, s: p, e: p + 1 }, e: p + 1 });
+      if (x.k === "(") for (const a of Chain(p + 1)) if (t[a.e] && t[a.e].k === ")") out.push({ n: Object.assign({}, a.n, { paren: a.n.t === "bin" }), e: a.e + 1 });
+      const q = isW(p, "the") ? p + 1 : p;
+      const NOP = { sum: "+", total: "+", difference: "-", product: "*", quotient: "/" }[t[q] && t[q].w];
+      if (NOP && (isW(q + 1, "of") || isW(q + 1, "between"))) {
+        for (const a of E(q + 2)) {
+          if (isW(a.e, "and")) for (const b of E(a.e + 1)) out.push({ n: nb(NOP, a.n, b.n, p, b.e, "of"), e: b.e });
+          if ((NOP === "+" || NOP === "*") && t[a.e] && t[a.e].k === ",") for (const r of listFrom(NOP, a.n, a.e, p)) out.push(r);
+        }
+      }
+      let e;
+      if ((e = seq(p, "twice")) > 0 || (e = seq(p, "double")) > 0) for (const a of Atom(e)) out.push({ n: nb("*", syn(2, p), a.n, p, a.e, isW(p, "twice") ? "twice" : "double"), e: a.e });
+      if ((e = seq(p, "triple")) > 0 || (e = seq(p, "thrice")) > 0) for (const a of Atom(e)) out.push({ n: nb("*", syn(3, p), a.n, p, a.e, "triple"), e: a.e });
+      if ((e = seq(p, "half of")) > 0 || (e = seq(p, "half")) > 0) for (const a of Atom(e)) out.push({ n: nb("/", a.n, syn(2, a.e), p, a.e, "half"), e: a.e });
+      if ((e = seq(q, "square of")) > 0 || (e = seq(q, "cube of")) > 0) { const k = isW(q, "square") ? 2 : 3; for (const a of Atom(e)) out.push({ n: nb("^", a.n, syn(k, a.e), p, a.e), e: a.e }); }
+      if (t[q] && t[q].k === "ord" && seq(q + 1, "power of") > 0) for (const a of Atom(q + 3)) out.push({ n: nb("^", a.n, syn(t[q].v, a.e), p, a.e), e: a.e });
+      if ((e = seq(q, "quantity")) > 0) { if (isW(e, "of")) e++; for (const a of E(e).slice().reverse()) out.push({ n: Object.assign({}, a.n, { s: p }), e: a.e }); }
+      return out;
+    });
+  }
+  function listFrom(op, acc, pos, start) {
+    const out = [];
+    if (!(t[pos] && t[pos].k === ",")) { if (isW(pos, "and")) for (const c of E(pos + 1)) out.push({ n: nb(op, acc, c.n, start, c.e, "of"), e: c.e }); return out; }
+    if (isW(pos + 1, "and")) { for (const c of E(pos + 2)) out.push({ n: nb(op, acc, c.n, start, c.e, "of"), e: c.e }); return out; }
+    for (const b of E(pos + 1)) for (const r of listFrom(op, nb(op, acc, b.n, start, b.e, "of"), b.e, start)) out.push(r);
+    return out;
+  }
+  function F(p) {
+    return M("F", p, () => {
+      const out = [];
+      for (const a of Atom(p)) {
+        out.push(a);
+        if (isW(a.e, "squared")) out.push({ n: nb("^", a.n, syn(2, a.e), p, a.e + 1), e: a.e + 1 });
+        if (isW(a.e, "cubed")) out.push({ n: nb("^", a.n, syn(3, a.e), p, a.e + 1), e: a.e + 1 });
+        const e = seq(a.e, "to the power of");
+        if (e > 0 && t[e] && t[e].k === "num") out.push({ n: nb("^", a.n, { t: "num", v: t[e].v, s: e, e: e + 1 }, p, e + 1), e: e + 1 });
+      }
+      return out;
+    });
+  }
+  const MULOPS = [["times", "*"], ["multiplied by", "*"], ["divided by", "/"]];
+  const ADDOPS = [["plus", "+", 0, "inf"], ["minus", "-", 0, "inf"], ["more than", "+", 1, "more"], ["less than", "-", 1, "less"], ["fewer than", "-", 1, "less"],
+    ["increased by", "+", 0, "incr"], ["decreased by", "-", 0, "decr"], ["reduced by", "-", 0, "decr"], ["added to", "+", 1], ["subtracted from", "-", 1],
+    ["taken away from", "-", 1], ["take away", "-", 0]];
+  function T(p) {
+    return M("T", p, () => {
+      const res = [], fr = F(p).slice();
+      for (let i = 0; i < fr.length && res.length < CAP; i++) {
+        const a = fr[i]; res.push(a);
+        for (const [w, op] of MULOPS) { const e = seq(a.e, w); if (e > 0) for (const b of F(e)) fr.push({ n: nb(op, a.n, b.n, p, b.e, "inf"), e: b.e }); }
+      }
+      return res;
+    });
+  }
+  function E(p) {
+    return M("E", p, () => {
+      const res = [], fr = T(p).slice();
+      for (let i = 0; i < fr.length && res.length < CAP; i++) {
+        const a = fr[i]; res.push(a);
+        for (const [w, op, rev, st] of ADDOPS) {
+          const e = seq(a.e, w);
+          if (e > 0) for (const b of T(e)) fr.push({ n: rev ? nb(op, b.n, a.n, p, b.e, st) : nb(op, a.n, b.n, p, b.e, st), e: b.e });
+        }
+      }
+      return res;
+    });
+  }
+  function Cmd(p) {
+    return M("K", p, () => {
+      const out = [];
+      const two = (e0, mid, make) => { for (const a of E(e0)) for (const m of mid) { const e = seq(a.e, m); if (e > 0) for (const b of E(e)) out.push({ n: make(a.n, b.n, b.e), e: b.e }); } };
+      let e;
+      if ((e = seq(p, "add")) > 0) { two(e, ["and"], (a, b, end) => nb("+", a, b, p, end, "cmd")); two(e, ["to"], (a, b, end) => nb("+", b, a, p, end)); }
+      if ((e = seq(p, "subtract")) > 0) two(e, ["from"], (a, b, end) => nb("-", b, a, p, end, "from"));
+      if ((e = seq(p, "take away")) > 0) two(e, ["from"], (a, b, end) => nb("-", b, a, p, end));
+      if ((e = seq(p, "take")) > 0) two(e, ["away from"], (a, b, end) => nb("-", b, a, p, end));
+      if ((e = seq(p, "multiply")) > 0) two(e, ["by", "and"], (a, b, end) => nb("*", a, b, p, end, "cmd"));
+      if ((e = seq(p, "divide")) > 0) two(e, ["by"], (a, b, end) => nb("/", a, b, p, end, "cmd"));
+      return out;
+    });
+  }
+  const POST = [["multiplied by", "*", "then"], ["multiply by", "*", "thenv"], ["times", "*", "then"], ["multiply", "*", "thenv"], ["divided by", "/", "then"], ["divide by", "/", "thenv"],
+    ["increased by", "+", "then"], ["plus", "+", "then"], ["add", "+", "thenv"], ["decreased by", "-", "then"], ["reduced by", "-", "then"], ["minus", "-", "then"],
+    ["subtract", "-", "thenv"], ["take away", "-", "thenv"]];
+  const UNARY = [["squared", a => ["^", a, 2]], ["cubed", a => ["^", a, 3]], ["doubled", a => ["*", a, 2, 1]], ["tripled", a => ["*", a, 3, 1]], ["halved", a => ["/", a, 2]]];
+  function Chain(p) {
+    return M("C", p, () => {
+      const res = [], fr = Cmd(p).concat(E(p));
+      for (let i = 0; i < fr.length && res.length < CAP; i++) {
+        const a = fr[i]; res.push(a);
+        let q = a.e, sep = false;
+        if (t[q] && t[q].k === ",") { q++; sep = true; }
+        if (isW(q, "then")) { q++; sep = true; }
+        if (!sep) continue;
+        for (const [w, op, st] of POST) { const e = seq(q, w); if (e > 0) for (const b of E(e)) fr.push({ n: nb(op, a.n, b.n, p, b.e, st, op === "*" && b.n.t !== "bin"), e: b.e }); }
+        for (const [w, f] of UNARY) { const e = seq(q, w); if (e > 0) { const [op, l, k, sw] = f(a.n); fr.push({ n: nb(op, l, syn(k, e), p, e, "then", sw), e }); } }
+        const e = seq(q, "to the power of");
+        if (e > 0 && t[e] && t[e].k === "num") fr.push({ n: nb("^", a.n, { t: "num", v: t[e].v, s: e, e: e + 1 }, p, e + 1), e: e + 1 });
+      }
+      return res;
+    });
+  }
+  const top = Chain(0).find(a => a.e === L);
+  if (!top) {
+    throw kid("I couldn't read that phrase. Try rewording it with words like “the sum of 8 and 3”, “5 less than n”, or “3 times the sum of n and 2” — or type the expression instead, like 3 × (n + 5).");
+  }
+  if (top.n.t !== "bin") throw kid("There's no math action in that phrase. Add words like “plus”, “the sum of”, or “times”.");
+  // fresh copy with ids; spans from token positions
+  const mkIds = n => { const c = Object.assign({}, n, { id: ++NID }); if (n.t === "bin") { c.l = mkIds(n.l); c.r = mkIds(n.r); } return c; };
+  const tree = mkIds(top.n);
+  const toks = t.map(x => ({ w: x.txt, o: null })), sp = {};
+  const own = n => { for (let i = n.s; i < n.e; i++) toks[i].o = n.id; sp[n.id] = [n.s, n.e]; if (n.t === "bin") { own(n.l); own(n.r); } };
+  // a child span may sit outside the parent's start when words were reversed ("5 more than n"): spans still nest, so parents first, then children
+  own(tree);
+  for (const x of toks) if (x.o === null) x.o = tree.id;
+  const ops = countOps(tree);
+  if (ops > 8) throw kid("That's a long one! This helper can do up to 8 steps. Try one part of it at a time.");
+  return { tree, toks, sp };
+}
+
+/* ===================== reading a typed expression ===================== */
+function parseExpr(raw) {
+  let s = String(raw).replace(/[−–—]/g, "-").replace(/[×·∙]/g, "*").replace(/[÷:]/g, "/").replace(/²/g, "^2").replace(/³/g, "^3").trim();
+  if (!s) throw kid("Type or paste a problem first.");
+  if (s.includes("=")) throw kid("That has an = sign, so it's an equation. Type just one side of it (the expression).");
+  const raw0 = (s.match(/\d+\.?\d*|\.\d+|[a-zA-Z]|[-+*\/^()\[\]{}]|\S/g) || []);
+  let t = [];
+  for (const p of raw0) {
+    if (/^[\d.]/.test(p)) { if (!/\d/.test(p)) throw kid("There's a dot without a number. Check your decimals."); if (p.replace(".", "").length > 9) throw kid("That number is too big for this helper. Try smaller numbers."); t.push({ k: "num", v: normNum(p.replace(/\.$/, "")) }); }
+    else if (/^[a-zA-Z]$/.test(p)) t.push({ k: "var", name: p.toLowerCase() });
+    else if ("+-*/^".includes(p)) t.push({ k: "op", v: p });
+    else if ("([{".includes(p)) t.push({ k: "open", v: p });
+    else if (")]}".includes(p)) t.push({ k: "close", v: p });
+    else if (p === ",") throw kid("Take out the comma. (Write big numbers like 1200 without commas.)");
+    else throw kid(`I don't know the symbol “${p}”. Use + − × ÷ and ( ).`);
+  }
+  // x between numbers (or a number and a group) means times
+  const letters = new Set(t.filter(x => x.k === "var").map(x => x.name));
+  t.forEach((x, i) => {
+    if (x.k === "var" && x.name === "x") {
+      const a = t[i - 1], b = t[i + 1];
+      if (a && b && (a.k === "num" || a.k === "close") && (b.k === "num" || b.k === "open") && letters.size === 1) t[i] = { k: "op", v: "*", x: true };
+    }
+  });
+  // negative numbers
+  const u = [];
+  for (let i = 0; i < t.length; i++) {
+    const x = t[i], prev = u[u.length - 1];
+    if (x.k === "op" && x.v === "-" && (!prev || prev.k === "op" || prev.k === "open")) {
+      if (t[i + 1] && t[i + 1].k === "num") { u.push({ k: "num", v: normNum("-" + t[i + 1].v) }); i++; continue; }
+      throw kid("A − sign in front of a letter or ( is tricky here. Try a number instead, like −5, or write 0 − (…).");
+    }
+    u.push(x);
+  }
+  t = u;
+  // implicit times: 3n, 3(4 + 5), (2)(3)
+  const v = []; let implicit = false;
+  for (const x of t) {
+    const prev = v[v.length - 1];
+    if (prev && (prev.k === "num" || prev.k === "var" || prev.k === "close") && (x.k === "num" || x.k === "var" || x.k === "open")) {
+      if (prev.k === "num" && x.k === "num") throw kid(`Two numbers in a row (${numText(prev.v)} and ${numText(x.v)}). Put a sign between them, like + or ×.`);
+      v.push({ k: "op", v: "*", imp: true }); implicit = true;
+    }
+    v.push(x);
+  }
+  t = v;
+  // check it makes sense
+  const stack = [], PAIR = { "(": ")", "[": "]", "{": "}" };
+  t.forEach((x, i) => {
+    const prev = t[i - 1], nx = t[i + 1];
+    if (x.k === "op") {
+      const shown = o => SYM[o] || o;
+      if (!prev || prev.k === "open") throw kid(`It starts with ${shown(x.v)}, but there's nothing in front of it. Put a number first.`);
+      if (prev.k === "op") throw kid(`Two signs in a row (${shown(prev.v)} ${shown(x.v)}). Take one out or put a number between them.`);
+      if (!nx) throw kid(`It ends with ${shown(x.v)}. Something is missing after it.`);
+      if (nx.k === "close") throw kid(`There's a ${shown(x.v)} with nothing after it before the ${nx.v}.`);
+    }
+    if (x.k === "open") { if (nx && nx.k === "close") throw kid(`There's an empty ${x.v} ${nx.v}. Put something inside or take it out.`); stack.push(x.v); }
+    if (x.k === "close") {
+      if (!stack.length) throw kid(`There's a ${x.v} with nothing to match it. Take it out or add the opening one.`);
+      const o = stack.pop(); if (PAIR[o] !== x.v) throw kid(`The ${o} is closed with ${x.v}. Use matching symbols: ( ) or [ ] or { }.`);
+    }
+  });
+  if (stack.length) throw kid(`A ${stack[stack.length - 1]} is never closed. Add a ${PAIR[stack[stack.length - 1]]} to close it.`);
+  let i = 0;
+  const peek = () => t[i];
+  function prim() {
+    const x = t[i++];
+    if (x.k === "num") return N(x.v);
+    if (x.k === "var") return V(x.name);
+    if (x.k === "open") { const e = add(); i++; if (e.t === "bin") e.paren = true; return e; }
+    throw kid("Something doesn't look right. Check what you typed.");
+  }
+  function pow() {
+    const b = prim();
+    if (peek() && peek().k === "op" && peek().v === "^") {
+      i++; const e = pow();
+      if (e.t !== "num" || !/^\d+$/.test(e.v) || +e.v > 12) throw kid("Exponents in this helper need to be whole numbers like 2 or 3.");
+      return B("^", b, e);
+    }
+    return b;
+  }
+  function mul() { let a = pow(); while (peek() && peek().k === "op" && (peek().v === "*" || peek().v === "/")) { const o = t[i++].v; a = B(o, a, pow()); } return a; }
+  function add() { let a = mul(); while (peek() && peek().k === "op" && (peek().v === "+" || peek().v === "-")) { const o = t[i++].v; a = B(o, a, mul()); } return a; }
+  const tree = add();
+  if (i < t.length) throw kid("Something doesn't look right. Check what you typed.");
+  tree.paren = false;
+  const ops = countOps(tree);
+  if (!ops) throw kid("There's no operation to translate. Add +, −, ×, or ÷.");
+  if (ops > 8) throw kid("That's a long one! This helper can do up to 8 operations. Try one part at a time.");
+  return { tree, implicit, typed: s };
+}
+// words or an expression?
+function cleanInstructions(raw) {
+  return String(raw).replace(/^\s*(write|translate|show|change)\s+(the|this|an)?\s*(expression|problem)?\s*/i, " ")
+    .replace(/\s+(in|as|using|into)\s+(a\s+)?(words?|word phrase|a phrase|phrase)\s*[.?!]?\s*$/i, " ").replace(/:\s*$/, "").trim();
+}
+function looksLikeWords(raw) { return /[a-z]{2,}/i.test(cleanInstructions(raw)); }
+
+/* ===================== a lesson ===================== */
+function buildLesson(src, dir, level) {
+  let L;
+  if (typeof src === "string") {
+    const raw = src.trim();
+    if (!raw) throw kid("Type or paste a problem first.");
+    if (looksLikeWords(raw)) {
+      const p = parseWords(raw);
+      L = { dir: "w2e", tree: p.tree, toks: p.toks, sp: p.sp, custom: true, src: raw };
+    } else {
+      const p = parseExpr(cleanInstructions(raw));
+      L = { dir: "e2w", tree: p.tree, implicit: p.implicit, custom: true, src: raw };
+    }
+    L.level = "custom";
+  } else L = { dir, tree: src, level, custom: false };
+  const ph = phrase(L.tree, "lead");
+  L.cx = ph.cx;
+  if (!L.toks) { L.toks = ph.toks; L.sp = ph.sp; }
+  L.nodes = nodeMap(L.tree);
+  L.order = opsInOrder(L.tree).map(n => n.id);
+  L.rank = new Map(L.order.map((id, k) => [id, k + 1]));
+  L.mcas = L.level === 3;
+  L.steps = L.mcas ? [{ type: "mcas" }, { type: "gate", final: true, mc: true }] : pieceSteps(L, true);
+  L.steps.push({ type: "sense" }, { type: "done" });
+  return L;
+}
+function pieceSteps(L, withCopy) {
+  const st = [];
+  if (L.dir === "w2e") L.order.forEach(id => st.push({ type: "piece", id }, { type: "gate", id }));
+  else {
+    if (withCopy) st.push({ type: "copy" });
+    L.order.forEach((id, k) => {
+      const done = new Set(L.order.slice(0, k));
+      const s = { type: "first", id, done };
+      s.opts = shuffle(optsFirst(L, s), makeRng(k * 977 + L.order.length * 31 + 7));
+      if (s.opts.length >= 2) st.push(s);
+      st.push({ type: "words", id }, { type: "gate", id });
+    });
+  }
+  return st;
+}
+// L3: build it piece by piece, then come back to the test question
+function walkSteps(L) { return pieceSteps(L, false); }
+const pieceWords = (L, id) => { const [s, e] = L.sp[id]; return joinWords(L.toks.slice(s, e).map(t => t.w)); };
+const fullWords = L => joinWords(L.toks.map(t => t.w));
+function ownWords(L, id) { const [s, e] = L.sp[id]; return L.toks.slice(s, e).filter(t => t.o === id).map(t => t.w).join(" "); }
+
+/* ---------- multiple-choice options ---------- */
+function mk(op, l, r, style) { return { t: "bin", op, l, r, style, id: ++NID }; }
+const CONF = { "+": ["*", "-", "/"], "-": ["/", "+", "*"], "*": ["+", "/", "-"], "/": ["-", "*", "+"], "^": ["*"] };
+function mapStyle(st, to) {
+  if (st === "more" && to === "-") return "less"; if (st === "less" && to === "+") return "more";
+  if (st === "incr" && to === "-") return "decr"; if (st === "decr" && to === "+") return "incr";
+  if (st === "from" && to !== "-") return "cmd";
+  return st;
+}
+function mutations(n) {
+  const out = [];
+  if ((n.op === "-" || n.op === "/" || n.op === "^") && canon(n.l) !== canon(n.r)) out.push({ tree: mk(n.op, n.r, n.l, n.style), kind: "order" });
+  if (n.op !== "^") {
+    if (n.l.t === "bin" && n.l.op !== "^") out.push({ tree: mk(n.l.op, n.l.l, mk(n.op, n.l.r, n.r, "flat"), "flat"), kind: "group" });
+    if (n.r.t === "bin" && n.r.op !== "^") out.push({ tree: mk(n.r.op, mk(n.op, n.l, n.r.l, "flat"), n.r.r, "flat"), kind: "group" });
+  }
+  for (const o of CONF[n.op]) out.push({ tree: mk(o, n.l, n.r, mapStyle(n.style, o)), kind: "op", op: o });
+  return out;
+}
+function shuffle(a, rng) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function readsAs(text, tree) { try { return same(parseWords(text).tree, tree); } catch (e) { return false; } }
+function pickDistractors(cands, correctTree, textOf, taken, max, check) {
+  const pri = { order: 0, group: 1, op: 2 };
+  const seen = new Set(taken), out = [];
+  const sorted = cands.slice().sort((a, b) => pri[a.kind] - pri[b.kind]);
+  // one of each kind first, then fill
+  for (const pass of [0, 1]) for (const c of sorted) {
+    if (out.length >= max) break;
+    if (out.includes(c)) continue;
+    if (pass === 0 && out.some(o => o.kind === c.kind)) continue;
+    if (same(c.tree, correctTree)) continue;
+    const txt = textOf(c);
+    if (seen.has(txt)) continue;
+    if (check && !check(txt, c.tree)) continue;
+    seen.add(txt); c.text = txt; out.push(c);
+  }
+  return out;
+}
+// words → expression: which expression matches the highlighted words?
+function optsPiece(L, s, rng) {
+  const n = L.nodes[s.id], base = dispTree(n);
+  const opts = [{ html: exprHTML(n), text: exprText(n), ok: true, kind: "right" }];
+  if (n.op === "*" && (!isLeaf(n.l) || !isLeaf(n.r)) && canon(n.l) !== canon(n.r)) {
+    const alt = Object.assign({}, n, { swap: !n.swap });
+    opts.push({ html: exprHTML(alt), text: exprText(alt), ok: true, kind: "swap" });
+  }
+  const ds = pickDistractors(mutations(base), base, c => exprText(c.tree), opts.map(o => o.text), 4 - opts.length);
+  for (const d of ds) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op });
+  return shuffle(opts, rng);
+}
+// expression → words: which words match the highlighted part?
+function optsWords(L, s, rng) {
+  const n = L.nodes[s.id], ctx = (L.cx[n.id] || {}).ctx || "lead";
+  const right = pieceWords(L, n.id);
+  const opts = [{ text: right, ok: true, kind: "right" }];
+  const ds = pickDistractors(mutations(n), n, c => phraseText(c.tree, ctx), [right], 3, readsAs);
+  for (const d of ds) opts.push({ text: d.text, ok: false, kind: d.kind, op: d.op });
+  return shuffle(opts, rng);
+}
+// expression → words: which part happens first?
+function leafAt(n, side) { while (n.t === "bin") { const [a, b] = kids(n); n = side === "right" ? b : a; } return n; }
+function snippet(n, done) {
+  const [a, b] = kids(n);
+  const part = (c, side) => {
+    if (c.t !== "bin" || done.has(c.id)) { const p = needP(c, n, side === "l" ? "l" : "r", true); const s = exprText(c); return p ? "(" + s + ")" : s; }
+    return exprText(leafAt(c, side === "l" ? "right" : "left"));
+  };
+  if (n.op === "^") return part(a, "l") + exprText(b).split("").map(ch => SUPD[ch] || ch).join("");
+  return `${part(a, "l")} ${SYM[n.op]} ${part(b, "r")}`;
+}
+function optsFirst(L, s) {
+  const done = s.done, right = L.nodes[s.id];
+  const opts = [{ text: exprText(right), ok: true, id: right.id }], seen = new Set([opts[0].text]);
+  for (const id of L.order) {
+    if (id === s.id || done.has(id)) continue;
+    const txt = snippet(L.nodes[id], done);
+    if (seen.has(txt)) continue;
+    seen.add(txt); opts.push({ text: txt, ok: false, id });
+  }
+  return opts.slice(0, 4);
+}
+function pathParen(L, from, to) { // is there a ( ) between node `from` (outside) and `to` (inside)?
+  const down = (n, lead) => {
+    if (n.id === to) return [];
+    if (n.t !== "bin") return null;
+    const [a, b] = kids(n);
+    for (const [c, side] of [[a, "l"], [b, "r"]]) { const r = down(c); if (r) return [needP(c, n, side, true)].concat(r); }
+    return null;
+  };
+  const r = down(L.nodes[from]); return !!(r && r.some(Boolean));
+}
+function msgFirst(L, s, pickId) {
+  const right = L.nodes[s.id], d = L.nodes[pickId];
+  if (pathParen(L, pickId, s.id)) return "Look for ( ) first. The part inside the ( ) happens before anything outside it.";
+  if (right.op === "^" && d.op !== "^") return "Exponents come before ×, ÷, +, and −. Find the small raised number.";
+  if (PREC[d.op] < PREC[right.op]) return "× and ÷ come before + and −. Find the × or ÷ part first.";
+  if (PREC[d.op] === PREC[right.op]) return "These are the same kind of step, so go left to right.";
+  return "Use the order of operations: ( ) first, then exponents, then × and ÷, then + and −.";
+}
+// L3 test-style question: whole expression or whole phrase
+function optsMcas(L, rng) {
+  const tree = L.tree;
+  const cands = [];
+  for (const n of opsInOrder(tree)) for (const m of mutations(n)) cands.push({ tree: replaceIn(tree, n.id, m.tree), kind: m.kind, op: m.op, at: n.id });
+  let opts;
+  if (L.dir === "w2e") {
+    const base = dispTree(tree);
+    let shown = tree;
+    // sometimes show the right answer written another (equal) way, like on a real test
+    const flips = opsInOrder(tree).filter(n => COMM(n.op) && canon(n.l) !== canon(n.r) && (!isLeaf(n.l) || !isLeaf(n.r)));
+    if (flips.length && rng() < 0.5) { const f = flips[Math.floor(rng() * flips.length)]; shown = replaceIn(tree, f.id, Object.assign({}, f, { swap: !f.swap })); }
+    opts = [{ html: exprHTML(shown), text: exprText(shown), ok: true, kind: "right", tree: shown }];
+    const dcands = cands.map(c => Object.assign({}, c, { tree: dispTree(c.tree) }));
+    for (const d of pickDistractors(dcands, base, c => exprText(c.tree), [opts[0].text, exprText(tree)], 3)) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op, at: d.at });
+  } else {
+    const right = fullWords(L);
+    opts = [{ text: right, ok: true, kind: "right" }];
+    for (const d of pickDistractors(cands, tree, c => phraseText(c.tree, "lead"), [right], 3, readsAs)) opts.push({ text: d.text, ok: false, kind: d.kind, op: d.op, at: d.at });
+  }
+  return shuffle(opts, rng);
+}
+
+/* ---------- key words: one fact + a pointer ---------- */
+const KEYS = [
+  [/less than|fewer than/, "“less than” flips the order: “5 less than n” means start with n, then take away 5 (n − 5).", "-", true],
+  [/more than/, "“more than” means add (+): “5 more than n” is n + 5.", "+"],
+  [/subtract.*from|subtracted from|away from/, "“subtract 4 from 10” starts with 10: 10 − 4. Start with the number after “from”.", "-", true],
+  [/difference/, "“the difference of” means subtract (−). Keep the numbers in the order the words say them.", "-", true],
+  [/sum|total/, "“the sum of” means add (+) the two things after “of”.", "+"],
+  [/product/, "“the product of” means multiply (×) the two things after “of”.", "*"],
+  [/quotient/, "“the quotient of” means divide (÷). The first number is the one being divided.", "/", true],
+  [/twice|double/, "“twice” or “double” means 2 × something.", "*"],
+  [/triple|thrice/, "“triple” means 3 × something.", "*"],
+  [/half/, "“half of” means divide by 2 (÷ 2).", "/"],
+  [/increased|plus|\badd\b|added/, "“plus”, “add”, and “increased by” all mean +.", "+"],
+  [/decreased|reduced|minus|subtract|take away/, "“minus”, “subtract”, and “decreased by” all mean −. Keep the order the words say.", "-", true],
+  [/multipl|times/, "“times” and “multiplied by” mean ×.", "*"],
+  [/divid/, "“divided by” means ÷. The number before “divided by” goes first.", "/", true],
+  [/squared|square/, "“squared” means times itself: 5 squared is 5².", "^"],
+  [/cubed|cube/, "“cubed” means 3 of the same number multiplied: 5 cubed is 5³.", "^"],
+  [/power/, "“to the power of” is an exponent: the small raised number.", "^"]];
+function keyFact(L, id) {
+  const n = L.nodes[id], w = ownWords(L, id);
+  for (const [re, fact, op] of KEYS) if (re.test(w) && (op === n.op)) return fact;
+  return { "+": "+ can be said “plus”, “the sum of”, or “more than”.", "-": "− can be said “minus”, “the difference of”, or “less than”.", "*": "× can be said “times” or “the product of”.", "/": "÷ can be said “divided by” or “the quotient of”.", "^": "An exponent can be said “squared”, “cubed”, or “to the power of”." }[n.op];
+}
+const SAY = { "+": "“plus”, “the sum of”, or “more than”", "-": "“minus”, “the difference of”, or “less than”", "*": "“times” or “the product of”", "/": "“divided by” or “the quotient of”", "^": "“squared”, “cubed”, or “to the power of”" };
+function H(tag, text) { return { tag, text }; }
+function childNeedsParens(n) { const [a, b] = kids(n); return needP(a, n, "l", true) && a.t === "bin" || needP(b, n, "r", true) && b.t === "bin"; }
+function hintsFor(L, s) {
+  if (!s) return [];
+  if (s.type === "piece") {
+    const n = L.nodes[s.id], w = ownWords(L, s.id), hs = [H("Key words", keyFact(L, s.id))];
+    if (childNeedsParens(n)) {
+      const [ka, kb] = kids(n), c = [ka, kb].find((k, i) => k.t === "bin" && needP(k, n, i ? "r" : "l", true));
+      const cw = c ? ownWords(L, c.id) : "";
+      hs.push(H("( )", /sum|total/.test(cw) ? "Look for the words “the sum of” — that usually means parentheses around the addition first."
+        : /difference/.test(cw) ? "Look for the words “the difference of” — that usually means parentheses around the subtraction first."
+        : "The green part was done first in the words. Without ( ), × and ÷ would happen before + and −, so put ( ) around the green part."));
+    }
+    if (/then/.test(w)) hs.push(H("Then", "“then” means everything before it is finished first. Keep that part together."));
+    if (n.op === "-" || n.op === "/" || /less than|from/.test(w)) hs.push(H("Order", "Check the order of the numbers in the phrase. For − and ÷, switching the order changes the answer."));
+    return hs;
+  }
+  if (s.type === "words") {
+    const n = L.nodes[s.id], hs = [H("Say it", `${SYM[n.op]} can be said ${SAY[n.op]}. Find the choice that uses one of those.`)];
+    if (n.op === "-" || n.op === "/") hs.push(H("Order", `Check the order of the numbers. ${n.op === "-" ? "“less than” flips the order: 9 − 4 is “4 less than 9”." : "The number before ÷ is the one being divided."}`));
+    if (childNeedsParens(n)) hs.push(H("( )", "The ( ) part was done first. The words should keep that part together, like “6 times the sum of 8 and 3”."));
+    return hs;
+  }
+  if (s.type === "first") {
+    const hs = [], t = exprText(L.tree);
+    if (/[(\[{]/.test(t)) hs.push(H("( )", "Look for ( ) first. Whatever is inside happens before anything outside."));
+    if (/[²³⁴⁵⁶⁷⁸⁹⁰¹]/.test(t)) hs.push(H("Exponents", "Exponents come next, before × ÷ + −."));
+    hs.push(H("× ÷ first", "× and ÷ come before + and −. If two steps are the same kind, go left to right."));
+    return hs;
+  }
+  if (s.type === "mcas") return [
+    H("Cross out", "Cross out choices with the wrong operation words first."),
+    H("Order", "Check the order of the numbers for − and ÷. “less than” and “subtract … from” flip the order."),
+    H("( )", "Look at the ( ). Does the choice keep the same part together, so it happens first?"),
+    H("Build it", "Still stuck? Tap “Walk me through it” to build it one piece at a time.")];
+  return [];
+}
+/* ---------- gentle redirects ---------- */
+function msgPiece(L, s, o) {
+  const n = L.nodes[s.id], w = ownWords(L, s.id);
+  if (o.kind === "op") return `Check the operation. ${keyFact(L, s.id)}`;
+  if (o.kind === "order") return /less than|fewer than/.test(w) ? "Check the order. “less than” flips it: start with the number after “less than”, then take away the first one."
+    : /from/.test(w) ? "Check the order. Start with the number after “from”, then take away the other one."
+    : "Check the order of the numbers in the phrase. For − and ÷, the order matters, so write them in the order the words say.";
+  return "Check the ( ). They decide which part happens first. The green part of the words happens first, so it needs to stay together.";
+}
+function msgWords(L, s, o) {
+  const n = L.nodes[s.id];
+  if (o.kind === "op") return `Check the operation word. ${SYM[o.op]} is not ${SYM[n.op]}. ${SYM[n.op]} can be said ${SAY[n.op]}.`;
+  if (o.kind === "order") return `Check the order. For ${SYM[n.op]} the order matters, and these words put the numbers the other way around.${n.op === "-" ? " (“less than” flips the order!)" : ""}`;
+  return "Check which part goes together. These words group a different part first than the ( ) do.";
+}
+function msgMcas(L, o) {
+  if (o.kind === "op") return "Look at the operation words again. One of the signs in this choice doesn't match the words.";
+  if (o.kind === "order") return "Check the order of the numbers. For − and ÷, the order matters. “less than” and “subtract … from” flip it.";
+  return "Look at what's grouped together. This choice makes a different part happen first.";
+}
+function checkPick(L, s, o) {
+  if (o.ok) return { ok: true };
+  if (s.type === "piece") return { ok: false, msg: msgPiece(L, s, o) };
+  if (s.type === "words") return { ok: false, msg: msgWords(L, s, o) };
+  if (s.type === "first") return { ok: false, msg: msgFirst(L, s, o.id) };
+  return { ok: false, msg: msgMcas(L, o) };
+}
+
+/* ===================== practice problems ===================== */
+function makeRng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const VARS = ["n", "m", "p", "y", "k", "t", "w"];
+function exampleTree(level, dir) {
+  if (level === 1) return B("*", B("+", 8, 3, "of"), 6, "then", true);
+  if (level === 2) return B("*", 3, B("+", 8, 4, "of"), "inf");
+  return dir === "w2e" ? B("-", B("*", 2, "n", "twice"), 5, "less") : B("*", 3, B("+", "n", 5, "of"), "inf");
+}
+function genTree(level, rng) {
+  const ri = (a, b) => a + Math.floor(rng() * (b - a + 1));
+  const pick = a => a[Math.floor(rng() * a.length)];
+  // a pair (a op b) with whole-number, non-negative value; returns [tree, value]
+  const pair = (op, style, max) => {
+    max = max || 20;
+    if (op === "+") { const a = ri(2, max), b = ri(2, max); return [B("+", a, b, style), a + b]; }
+    if (op === "-") { const b = ri(1, max - 2), a = b + ri(2, max); return [B("-", a, b, style), a - b]; }
+    if (op === "*") { const a = ri(2, 9), b = ri(2, 9); return [B("*", a, b, style), a * b]; }
+    const b = ri(2, 9), q = ri(2, 9); return [B("/", b * q, b, style), q];
+  };
+  const pairWithValue = (op, v, style) => { // a ± b that equals v
+    if (op === "+") { const a = ri(1, v - 1); return B("+", a, v - a, style); }
+    const b = ri(1, 12); return B("-", v + b, b, style);
+  };
+  const r = rng();
+  if (level === 1) {
+    if (r < 0.25) return pair(pick(OPS4), "of")[0];
+    if (r < 0.6 || r >= 0.8) {
+      const cmd = r >= 0.8, op2 = pick(["*", "/"]), op1 = pick(["+", "-"]);
+      const s1 = cmd ? (op1 === "+" ? "cmd" : "from") : "of", s2 = cmd ? "thenv" : "then";
+      if (op2 === "*") return B("*", pair(op1, s1, 15)[0], ri(2, 9), s2, true);
+      const c = ri(2, 9), q = ri(2, 9); return B("/", pairWithValue(op1, c * q, s1), c, s2);
+    }
+    const op1 = pick(["*", "/"]), op2 = pick(["+", "-"]);
+    const [p, v] = pair(op1, "of");
+    return B(op2, p, op2 === "-" ? ri(1, Math.max(1, v - 1)) : ri(2, 20), "then");
+  }
+  if (level === 2) {
+    const k = Math.floor(r * 9);
+    if (k === 0) return B("*", ri(2, 9), pair(pick(["+", "-"]), "of", 15)[0], "inf");
+    if (k === 1) return B("*", ri(2, 9), pair(pick(["+", "-"]), "of", 15)[0], "of");
+    if (k === 2) { const c = ri(2, 6), q = ri(2, 6); const d = pairWithValue("-", c, "of"); return B("/", pairWithValue("+", c * q, "of"), d, "then"); }
+    if (k === 3) return B("*", ri(2, 9), B("+", ri(2, 12), pair("*", "of")[0], "of"), "inf");
+    if (k === 4) { const [p, v] = pair("*", "of"); const b = ri(2, 6), q = ri(1, Math.max(1, Math.floor((v - 1) / b))); return B(pick(["+", "-"]), p, B("/", b * q, b, "of"), "then"); }
+    if (k === 5) { const m = pick([2, 3]); const [p] = pair(pick(["+", "-"]), "of", 12); return B("+", B("*", m, p, m === 2 ? pick(["twice", "double"]) : "triple"), ri(2, 15), "then"); }
+    if (k === 6) { const [p, v] = pair("*", "of"); return B("-", p, ri(1, Math.max(1, v - 1)), "from"); }
+    if (k === 7) { const [p, v] = pair("*", "of"); return pick([0, 1]) ? B("+", p, ri(2, 15), "more") : B("-", p, ri(1, Math.max(1, v - 1)), "less"); }
+    if (k === 8) { const s = ri(2, 15) * 2; return B("/", pairWithValue("+", s, "of"), 2, "half"); }
+  }
+  // level 3: variables
+  const x = pick(VARS), k = Math.floor(r * 12), a = ri(2, 9), b = ri(2, 12);
+  switch (k) {
+    case 0: return B("+", x, b, "more");
+    case 1: return B("-", x, b, "less");
+    case 2: return B("-", ri(10, 30), x, "less");
+    case 3: return B("*", a, B(pick(["+", "-"]), x, b, "of"), "inf");
+    case 4: return B("-", B("*", 2, x, "twice"), b, "less");
+    case 5: return B("/", B("+", x, b, "of"), a, "then");
+    case 6: return B("-", ri(10, 30), x, "from");
+    case 7: return B("/", B("+", x, b, "of"), 2, "half");
+    case 8: return B(pick(["+", "-"]), B("*", a, x, "of"), b, "then");
+    case 9: return B("+", B("/", x, a, "of"), b, "then");
+    case 10: return B("+", B("*", a, x, "of"), b, "more");
+    default: return B("*", B(pick(["+", "-"]), x, b, "of"), a, "then", true);
+  }
+}
+function generateProblem(level, rng, avoid) {
+  avoid = avoid || [];
+  let t;
+  for (let k = 0; k < 40; k++) { t = genTree(level, rng); if (!avoid.includes(canon(t))) break; }
+  return t;
+}
+function evalTree(n, vars) { // only used by tests: practice numbers stay whole and non-negative
+  if (n.t === "num") return Number(n.v);
+  if (n.t === "var") return vars ? vars[n.name] : NaN;
+  const a = evalTree(n.l, vars), b = evalTree(n.r, vars);
+  return { "+": a + b, "-": a - b, "*": a * b, "/": a / b, "^": a ** b }[n.op];
+}
+function treeNums(n, out) { out = out || []; walk(n, x => { if (x.t === "num") out.push(x.v); }); return out; }
+if (typeof module !== "undefined") module.exports = { KidErr, N, V, B, canon, same, exprText, exprHTML, phrase, phraseText, parseWords, parseExpr, lexWords, buildLesson, walkSteps, optsPiece, optsWords, optsFirst, optsMcas, checkPick, hintsFor, keyFact, generateProblem, genTree, exampleTree, makeRng, evalTree, treeNums, opsInOrder, dispTree, looksLikeWords, pieceWords, fullWords, mutations, countOps };
+</script>
+
+<!-- ======================= UI ======================= -->
+<script>
+const settings = { level: 1, dir: "w2e" };
+try { Object.assign(settings, JSON.parse(localStorage.getItem("we-settings") || "{}")); } catch (e) {}
+if (![1, 2, 3].includes(settings.level)) settings.level = 1;
+if (!["w2e", "e2w"].includes(settings.dir)) settings.dir = "w2e";
+// session (not saved): momentum + scaffolding fade per level & direction
+const S = { solved: 0, streak: 0, clean: {}, auto: {}, seen: {}, usedExample: {} };
+const FADE_AFTER = 3;          // clean problems in a row (no hints, no slips) before hints stop popping up
+let P = null, idx = 0, gateLock = false, rightPick = null;
+
+/* ---------- start screen ---------- */
+for (const id of ["segLevel", "segDir"]) document.querySelectorAll(`#${id} button`).forEach(b => b.addEventListener("click", () => {
+  if (id === "segLevel") settings.level = +b.dataset.v; else settings.dir = b.dataset.v;
+  try { localStorage.setItem("we-settings", JSON.stringify(settings)); } catch (e) {}
+  paintSettings();
+}));
+function paintSettings() {
+  document.querySelectorAll("#segLevel button").forEach(b => b.classList.toggle("on", +b.dataset.v === settings.level));
+  document.querySelectorAll("#segDir button").forEach(b => b.classList.toggle("on", b.dataset.v === settings.dir));
+  const t = exampleTree(settings.level, settings.dir), w = phraseText(t), e = exprHTML(t);
+  const lv = { 1: "Grade 5: sum, difference, product, quotient.", 2: "Bigger groups, like “times the sum of”.", 3: "Grade 6: variables, test-style choices." }[settings.level];
+  document.getElementById("levelExample").innerHTML = `${lv}<br>` + (settings.dir === "w2e" ? `<i>${esc(w)}</i> → <b class="expr">${e}</b>` : `<b class="expr">${e}</b> → <i>${esc(w)}</i>`);
+}
+paintSettings();
+function showStart() {
+  document.getElementById("mainScreen").classList.add("hidden");
+  document.getElementById("startScreen").classList.remove("hidden");
+  paintSettings();
+}
+const keyOf = (lv, dir) => `${lv}-${dir}`;
+function startPractice() {
+  const lv = settings.level, dir = settings.dir, key = keyOf(lv, dir);
+  if (!S.usedExample[key]) { S.usedExample[key] = true; loadLesson(buildLesson(exampleTree(lv, dir), dir, lv), key); }
+  else loadRandom(lv, dir);
+}
+function startCustom() {
+  const raw = document.getElementById("customExpr").value;
+  const msg = document.getElementById("ownMsg");
+  let L;
+  try { L = buildLesson(raw); } catch (e) {
+    msg.textContent = e.kid ? e.message : "Something doesn't look right. Check what you typed.";
+    document.getElementById("customExpr").focus();
+    return;
+  }
+  msg.textContent = "";
+  loadLesson(L, "custom");
+}
+function nextProblem() {
+  if (!P || P.key === "custom") { showStart(); const el = document.getElementById("customExpr"); el.value = ""; el.focus(); return; }
+  loadRandom(P.level, P.dir);
+}
+function loadRandom(lv, dir) {
+  const key = keyOf(lv, dir), seen = S.seen[key] || (S.seen[key] = []);
+  loadLesson(buildLesson(generateProblem(lv, Math.random, seen.concat(P ? canon(P.tree) : [])), dir, lv), key);
+}
+function loadLesson(L, key) {
+  P = L;
+  P.key = key; P.seed = Math.floor(Math.random() * 1e9); P.revealed = false; P.hintTaps = 0; P.wrongs = 0; P.finished = false; P.roughNo = false; P.reasonOk = false; P.fadedNow = false; P.walked = false; P.mcChoice = null;
+  if (S.auto[key] === undefined) S.auto[key] = true;
+  if (S.clean[key] === undefined) S.clean[key] = 0;
+  if (key !== "custom") (S.seen[key] || (S.seen[key] = [])).push(canon(P.tree));
+  idx = 0; gateLock = false; rightPick = null;
+  document.getElementById("startScreen").classList.add("hidden");
+  document.getElementById("mainScreen").classList.remove("hidden");
+  document.getElementById("solution").classList.add("hidden");
+  document.getElementById("ptitle").textContent = key === "custom" ? "Your problem" : `Level ${P.level}`;
+  render();
+}
+
+/* ---------- FSM transitions (only these move idx) ---------- */
+function advance() {
+  if (idx >= P.steps.length - 1) return;
+  idx++; rightPick = null;
+  if (P.steps[idx].type === "done") finishProblem();
+  render();
+}
+function goBack() {
+  if (!P || idx === 0 || P.steps[idx].type === "done") return;
+  resetStep(P.steps[idx]);
+  idx--;
+  const s = P.steps[idx];
+  resetStep(s);
+  for (let i = idx; i < P.steps.length; i++) if (P.steps[i].type !== "first") delete P.steps[i].opts;
+  gateLock = false; rightPick = null; P.roughNo = false;
+  render();
+}
+function resetStep(s) {
+  delete s.coach; delete s.picked;
+  if (s.swapped) { const n = P.nodes[s.id]; n.swap = !n.swap; s.swapped = false; }
+  if (s.type === "mcas") P.mcChoice = null;
+}
+function finishProblem() {
+  if (P.finished) return;
+  P.finished = true;
+  if (P.revealed) { S.streak = 0; return; }
+  S.solved++; S.streak++;
+  if (P.hintTaps === 0 && P.wrongs === 0) {
+    S.clean[P.key]++;
+    if (S.clean[P.key] >= FADE_AFTER && S.auto[P.key]) { S.auto[P.key] = false; P.fadedNow = true; }
+  } else S.clean[P.key] = 0;
+}
+function optsFor(s) {
+  if (s.opts) return s.opts;
+  const rng = makeRng(P.seed + idx * 7919);
+  if (s.type === "piece") s.opts = optsPiece(P, s, rng);
+  else if (s.type === "words") s.opts = optsWords(P, s, rng);
+  else if (s.type === "mcas") s.opts = optsMcas(P, rng);
+  return s.opts || [];
+}
+function pick(i) {
+  const s = P.steps[idx];
+  if (!["piece", "words", "first", "mcas"].includes(s.type) || rightPick !== null) return;
+  const o = optsFor(s)[i], r = checkPick(P, s, o);
+  if (r.ok) {
+    rightPick = i; delete s.coach;
+    if (o.kind === "swap") { const n = P.nodes[s.id]; n.swap = !n.swap; s.swapped = true; }
+    if (s.type === "mcas") P.mcChoice = o;
+    render();
+    setTimeout(() => { if (rightPick === i && P.steps[idx] === s) advance(); }, 450);
+    return;
+  }
+  (s.picked || (s.picked = [])).push(i);
+  s.coach = r.msg; P.wrongs++;
+  const hs = hintsFor(P, s);
+  if (S.auto[P.key] && s.picked.length >= 2 && (s.hints || 0) < hs.length) s.hints = (s.hints || 0) + 1;   // scaffolding: a hint pops up by itself
+  render();
+}
+function tapHint() {
+  const s = P.steps[idx], hs = hintsFor(P, s);
+  if (!hs.length || (s.hints || 0) >= hs.length) return;
+  s.hints = (s.hints || 0) + 1;
+  P.hintTaps++; S.clean[P.key] = 0; S.auto[P.key] = true;     // tapping hints brings the scaffolding back
+  render();
+}
+function walkThrough() {
+  const s = P.steps[idx];
+  if (s.type !== "mcas" || P.walked) return;
+  P.walked = true; P.hintTaps++; S.clean[P.key] = 0; S.auto[P.key] = true;
+  P.steps.splice(idx, 0, ...walkSteps(P));
+  render();
+}
+function gateTapped(cb) {
+  if (!cb.checked || gateLock) return;
+  gateLock = true;
+  setTimeout(() => { gateLock = false; advance(); }, 300);
+}
+function answerSense(yes) {
+  if (P.steps[idx].type !== "sense") return;
+  if (yes) { P.reasonOk = true; advance(); }
+  else { P.roughNo = true; render(); }
+}
+function showSolution() {
+  if (!P || P.key === "custom") return;          // never in custom mode (assigned work)
+  P.revealed = true; S.streak = 0; S.clean[P.key] = 0;
+  let rows = "";
+  P.order.forEach((id, k) => {
+    const w = esc(pieceWords(P, id)), e = exprHTML(P.nodes[id]);
+    rows += P.dir === "w2e"
+      ? `<div class="sol-row"><span class="wtxt">${CIRC[k + 1]} <i>${w}</i></span><small>→</small><span class="expr">${e}</span></div>`
+      : `<div class="sol-row"><span class="expr">${CIRC[k + 1]} ${e}</span><small>→</small><span class="wtxt"><i>${w}</i></span></div>`;
+  });
+  const el = document.getElementById("solution");
+  el.innerHTML = `<h3>The whole solution</h3>${rows}
+    <div class="sol-note">${P.dir === "w2e" ? `Whole expression: <b class="expr">${exprHTML(P.tree)}</b>` : `Whole thing in words: <i>${esc(fullWords(P))}</i>`}</div>
+    <div class="sol-note">Seeing the solution is OK when you're stuck. This one won't count as solved. Next time, try a 💡 hint first!</div>
+    <div class="controls"><button class="secondary" id="solClose" onclick="hideSolution()">Keep working on this one</button><button id="solNext" onclick="nextProblem()">Next problem →</button></div>`;
+  el.classList.remove("hidden");
+  render();
+  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+function hideSolution() { document.getElementById("solution").classList.add("hidden"); render(); }
+
+/* ---------- rendering ---------- */
+function doneSet() { const d = new Set(); for (let i = 0; i < idx; i++) { const s = P.steps[i]; if (s.type === "gate" && s.id) d.add(s.id); if (s.type === "gate" && s.final) P.order.forEach(id => d.add(id)); } return d; }
+function wordsHTML(o) {
+  o = o || {};
+  const marks = [];
+  const add = (id, cls) => { const sp = P.sp[id]; if (sp && sp[1] > sp[0]) marks.push([sp[0], sp[1], cls]); };
+  if (o.done) for (const id of o.done) if (id !== o.target) add(id, "x-done");
+  if (o.target) add(o.target, "x-target");
+  marks.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const badgeAt = {};
+  if (o.badges) for (const [id, k] of o.badges) {
+    const [s, e] = P.sp[id];
+    for (let i = s; i < e; i++) if (P.toks[i].o === id && P.toks[i].w !== ",") { badgeAt[i] = (badgeAt[i] || "") + `<span class="ordw">${CIRC[k]}</span>`; break; }
+  }
+  let html = "", stack = [], m = 0;
+  P.toks.forEach((t, i) => {
+    while (stack.length && stack[stack.length - 1] <= i) { html += "</span>"; stack.pop(); }
+    if (i > 0 && t.w !== ",") html += " ";
+    while (m < marks.length && marks[m][0] === i) { html += `<span class="${marks[m][2]}">`; stack.push(marks[m][1]); m++; }
+    html += (badgeAt[i] || "") + esc(t.w);
+  });
+  while (stack.length) { html += "</span>"; stack.pop(); }
+  return html;
+}
+function writtenTree() { return P.mcChoice && P.mcChoice.tree ? P.mcChoice.tree : P.tree; }
+function lineFor(s, cur) { // what that step put on paper (cur: the line being written now, with the earlier part in green)
+  if (s.type === "copy") return { html: exprHTML(P.tree), words: false };
+  if (s.final) return P.dir === "w2e" ? { html: exprHTML(writtenTree()), words: false } : { html: esc(fullWords(P)), words: true };
+  if (P.dir === "w2e") { const d = cur ? doneSet() : null; if (d) d.delete(s.id); return { html: exprHTML(P.nodes[s.id], d ? { done: d } : {}), words: false, node: s.id }; }
+  return { html: esc(pieceWords(P, s.id)), words: true };
+}
+function renderProblem(s) {
+  const done = doneSet();
+  let o = { done };
+  if (["piece", "words"].includes(s.type)) o.target = s.id;
+  if (s.type === "gate" && s.id) o.target = s.id;
+  if (s.type === "sense" || s.type === "done") o = { badges: P.rank };
+  if (s.type === "mcas" || (s.type === "gate" && s.final)) o = {};
+  const label = P.dir === "w2e" ? "📝 The words" : "🔢 The expression";
+  const body = P.dir === "w2e" ? `<div class="words" id="probText">${wordsHTML(o)}</div>` : `<div class="expr-big expr" id="probText">${exprHTML(P.tree, o)}</div>`;
+  document.getElementById("problem").innerHTML = `<div class="problem-label">${label}</div>${body}`;
+}
+function renderPaper(s) {
+  let html = `<div class="paper-label">📄 Your paper</div>`, any = false;
+  for (let i = 0; i < idx; i++) { const t = P.steps[i]; if (t.type === "gate" || t.type === "copy") { const l = lineFor(t); html += `<div class="line expr ${l.words ? "wline" : ""}">${l.html}</div>`; any = true; } }
+  if (s.type === "gate" || s.type === "copy") { const l = lineFor(s, true); html += `<div class="line cur expr ${l.words ? "wline" : ""}" id="curLine">${l.html}</div>`; any = true; }
+  if (!any) html += `<div class="paper-empty">Nothing yet. You'll write each piece here, one line at a time.</div>`;
+  document.getElementById("paper").innerHTML = html;
+}
+function choiceButtons(s, opts, stack, lettered) {
+  const wrong = new Set(s.picked || []);
+  return `<div class="choices ${stack ? "stack" : ""}">${opts.map((o, i) => {
+    const w = wrong.has(i), r = rightPick === i;
+    const lead = lettered ? `<span class="letter">${"ABCD"[i]}</span>` : "";
+    const mark = w ? `<span class="mark">✗</span>` : r ? `<span class="mark">✓</span>` : "";
+    const body = o.html ? `<span class="ch expr">${o.html}</span>` : `<span class="ch">${esc(o.text)}</span>`;
+    return `<button class="choice ${lettered ? "mc" : ""} ${w ? "wrong" : ""} ${r ? "right" : ""}" data-i="${i}" ${w ? "disabled" : ""} onclick="pick(${i})">${lead}${body}${mark}</button>`;
+  }).join("")}</div>`;
+}
+function render() {
+  const s = P.steps[idx];
+  renderProblem(s);
+  renderPaper(s);
+  const box = document.getElementById("step");
+  let html = "";
+  const hs = hintsFor(P, s), shown = s.hints || 0;
+  const hintBlock = () => shown ? `<div class="hints">${hs.slice(0, shown).map(h => `<div class="hintline"><span class="tag">${h.tag}</span>${h.text}</div>`).join("")}</div>` : "";
+  const coachBlock = () => s.coach ? `<div id="feedback" class="feedback coach">${s.coach}</div>` : `<div id="feedback" class="feedback"></div>`;
+  const check = `<label class="gate-check"><input type="checkbox" id="gateBox" onchange="gateTapped(this)" onkeydown="if(event.key==='Enter'){this.checked=true;gateTapped(this)}"> I wrote it</label>`;
+  const gatesBefore = P.steps.slice(0, idx).filter(t => t.type === "gate" || t.type === "copy").length;
+
+  if (s.type === "copy") {
+    html += `<div class="gate-head">✏️ Copy the expression</div><div class="gate-text">Write it at the top of your paper:</div>`;
+    html += `<div class="gate-line expr">${exprHTML(P.tree)}</div>`;
+    const notes = [];
+    if (P.implicit) notes.push("A number right next to a letter or a ( means multiply, so we wrote the × sign in. Write the × too.");
+    if (P.custom && /[*\/x]/i.test(P.src.replace(/[a-wyz]/gi, ""))) notes.push("We use × for times and ÷ for divide.");
+    notes.push("Then you'll write it in words, one piece at a time.");
+    html += `<div class="gate-note">${notes.join(" ")}</div>` + check;
+  } else if (s.type === "piece") {
+    html += `<div class="ask">What do the <span class="hlw">highlighted words</span> mean?<small>Pick what you would write.</small></div>`;
+    html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
+  } else if (s.type === "words") {
+    html += `<div class="ask">Which words match the <span class="hlw">highlighted part</span>?</div>`;
+    html += choiceButtons(s, optsFor(s), true, false) + coachBlock() + hintBlock();
+  } else if (s.type === "first") {
+    const first = !P.steps.slice(0, idx).some(t => t.type === "words");
+    html += `<div class="ask">${first ? "Which part do you do first?" : "Which part comes next?"}<small>That's the part to put into words ${first ? "first" : "next"}.</small></div>`;
+    html += choiceButtons(s, s.opts, false, false) + coachBlock() + hintBlock();
+  } else if (s.type === "mcas") {
+    html += `<div class="ask">${P.dir === "w2e" ? "Which expression matches the words?" : "Which words match the expression?"}${P.walked ? "<small>Now use what you built on your paper.</small>" : "<small>Like a test question: pick one.</small>"}</div>`;
+    html += choiceButtons(s, optsFor(s), true, true) + coachBlock() + hintBlock();
+    if (!P.walked) html += `<div class="walk"><button class="link" id="walkBtn" onclick="walkThrough()">🧩 Walk me through it, one piece at a time</button></div>`;
+  } else if (s.type === "gate") {
+    const l = lineFor(s, true);
+    const prev = P.steps[idx - 1];
+    let did = "✓ Correct!";
+    if (prev && prev.swapped) did += ` <span style="font-weight:normal">Both ways mean the same thing — you can multiply in either order.</span>`;
+    if (s.mc) did = `✓ Correct! It's choice ${"ABCD"[optsFor(prev).indexOf(P.mcChoice)]}.`;
+    html += `<div class="did">${did}</div><div class="gate-head">✏️ Write this on your paper</div>`;
+    html += `<div class="gate-text">${gatesBefore ? "Write it on the next line:" : "Write it on the first line:"}</div>`;
+    html += `<div class="gate-line expr ${l.words ? "wline" : ""}">${l.html}</div>`;
+    const last = s.final || s.id === P.order[P.order.length - 1];
+    let note = "";
+    if (last) note = P.dir === "w2e" ? "That's your whole expression!" : "That's the whole expression in words!";
+    else note = P.dir === "w2e" ? "This is what the highlighted words mean." : "These words go with the highlighted part.";
+    if (!s.final && P.nodes[s.id] && opsInOrder(P.nodes[s.id]).length > 1) note += P.dir === "w2e" ? " The green part is what you already wrote. Copy it in, just like this." : " The green part is what you already wrote. Use those words inside.";
+    if (P.dir === "w2e" && !s.final && P.nodes[s.id].op === "*" && !isLeaf(P.nodes[s.id].l) !== !isLeaf(P.nodes[s.id].r)) note += " Write the × sign — don't leave it out.";
+    html += `<div class="gate-note">${note}</div>` + check;
+  } else if (s.type === "sense") {
+    const wt = writtenTree();
+    html += `<div class="ask">🤔 Does the order of operations in your expression match the order of the words?</div>`;
+    html += `<div class="sense"><div class="sense-row"><span class="lbl">The words</span><div class="words">${wordsHTML({ badges: P.rank })}</div></div>`;
+    html += `<div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "Your expression" : "The expression"}</span><div class="expr">${exprHTML(wt, { badges: P.rank })}</div></div>`;
+    html += `<div class="sense-note">${P.order.length > 1 ? "① happens first, then ②" + (P.order.length > 2 ? ", and so on" : "") + ". Check that each number is on the same kind of step in both." : "Check: is it the same operation, with the numbers in the same order?"}</div></div>`;
+    if (!P.roughNo) html += `<div class="input-area"><button class="yn" id="yesBtn" onclick="answerSense(true)">Yes</button><button class="yn" id="noBtn" onclick="answerSense(false)">No</button></div>`;
+    else html += `<div id="feedback" class="feedback coach">Good thinking to check! Find ① in the words and ① in ${P.dir === "w2e" ? "your expression" : "the expression"}. Do they match? Then check ②. Fix any part on your paper that's different.</div><div class="input-area"><button class="check" id="matchBtn" onclick="P.reasonOk=true;advance()">My paper matches now ✓</button></div>`;
+  }
+  box.innerHTML = html;
+  box.classList.toggle("hidden", s.type === "done");
+  box.classList.toggle("gate", s.type === "gate" || s.type === "copy");
+
+  const fin = document.getElementById("final");
+  if (s.type === "done") {
+    fin.classList.remove("hidden");
+    const head = P.revealed ? "Finished! This one doesn't count because you saw the solution. Try the next one on your own 💪" : "🎉 You did it! Does your paper match?";
+    const w = `<i>${esc(fullWords(P))}</i>`, e = `<span class="expr">${exprHTML(writtenTree())}</span>`;
+    fin.innerHTML = `<div style="font-size:1rem;font-weight:normal;margin-bottom:6px">${head}</div><div class="pair-final">${P.dir === "w2e" ? w + "<br>→ " + e : e + "<br>→ " + w}</div>`
+      + (P.reasonOk && !P.revealed ? `<div class="reason-ok"><span class="big-check">✓</span><span>The order matches!</span></div>` : "")
+      + (P.fadedNow ? `<div class="faded-note">You're on a roll! Hints will stay out of the way now. Tap 💡 Hint any time you want one.</div>` : "")
+      + `<div class="controls" style="margin-top:14px"><button id="nextBtn" class="big" onclick="nextProblem()">${P.key === "custom" ? "Try another problem →" : "Next problem →"}</button></div>`;
+  } else fin.classList.add("hidden");
+
+  // controls
+  document.getElementById("backBtn").disabled = idx === 0 || s.type === "done";
+  const hb = document.getElementById("hintBtn");
+  const hintable = ["piece", "words", "first", "mcas"].includes(s.type);
+  hb.disabled = !hs.length || shown >= hs.length;
+  hb.className = (hintable ? "" : "hidden ") + (S.auto[P.key] ? "auto" : "faded");
+  hb.textContent = shown ? `💡 Another hint (${shown}/${hs.length})` : "💡 Hint";
+  if (shown >= hs.length && hs.length) hb.textContent = "💡 No more hints";
+  const solOpen = !document.getElementById("solution").classList.contains("hidden");
+  document.getElementById("solBtn").classList.toggle("hidden", P.key === "custom" || s.type === "done" || solOpen);
+  document.getElementById("stats").innerHTML = `<span title="Problems solved">⭐ <b id="solvedN">${S.solved}</b></span> &nbsp;<span title="In a row">🔥 <b id="streakN">${S.streak}</b></span>`;
+  const total = P.steps.length - 1;
+  document.getElementById("bar").style.width = Math.round(100 * idx / total) + "%";
+  document.getElementById("progress").textContent = s.type === "done" ? `Solved: ${S.solved} · In a row: ${S.streak}` : `Step ${idx + 1} of ${total}`;
+
+  const focusEl = document.getElementById("gateBox") || document.getElementById("yesBtn") || document.getElementById("matchBtn") || document.querySelector(".choice:not(:disabled)") || document.getElementById("nextBtn");
+  if (focusEl && !solOpen) focusEl.focus({ preventScroll: true });
+  const target = s.type === "done" ? fin : document.getElementById("controls");
+  if (!solOpen && target.getBoundingClientRect().bottom > window.innerHeight) target.scrollIntoView({ block: "end", behavior: "smooth" });
+}
+</script>
+</body>
+</html>
