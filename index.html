@@ -160,7 +160,20 @@
   .sol-row .wtxt { font-size: 1.05rem; }
   .pair-final { font-size: 1.15rem; font-weight: normal; margin: 6px 0; }
   .pair-final .expr { font-size: 1.7rem; font-weight: bold; }
+  .gp { color: #d6336c; font-weight: 900; background: #fde8ef; border-radius: 4px; padding: 0 1px; }
+  .gp-note { margin-top: 6px; color: #a61e4d; font-weight: bold; }
+  .x-flag { background: #ffe8cc; box-shadow: 0 0 0 2px #fd7e14; border-radius: 5px; color: #b35400; font-weight: bold; padding: 0 2px; }
+  .flagw { background: #ffe8cc; box-shadow: 0 0 0 2px #fd7e14; border-radius: 5px; color: #b35400; font-weight: bold; padding: 0 4px; }
+  .micro-lead { font-size: 1.1rem; margin-bottom: 6px; }
+  .micro-note { font-size: 1.05rem; color: #1e7e34; margin-bottom: 8px; }
+  .soft { color: #666; font-weight: normal; }
+  .viz { display: inline-block; text-align: left; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 6px 12px; margin: 6px auto 8px; font-size: 1.1rem; }
+  .vz { font-weight: bold; white-space: nowrap; } .vz.bad { color: #a35a00; } .vz.good { color: #1e7e34; }
+  .vz-note { font-size: 0.9rem; color: #555; white-space: normal; }
+  .readback { font-size: 1.15rem; line-height: 1.6; }
+  .coach .viz { display: block; max-width: 100%; overflow-x: auto; box-sizing: border-box; }
   @media (max-width: 520px) {
+    .vz { white-space: normal; } .viz { font-size: 1rem; }
     .words { font-size: 1.2rem; } .problem .expr-big { font-size: 1.6rem; }
     .gate-line.wline { font-size: 1.15rem; } .choices.stack .choice { font-size: 1rem; }
     .seg button { padding: 8px 10px; }
@@ -343,11 +356,12 @@ function R(n, o, lead) {
   if (n.t === "var") return o.html ? `<span class="v">${n.name}</span>` : n.name;
   const [a, b] = kids(n);
   const sub = (c, side) => {
-    const p = needP(c, n, side, lead);
+    const p = needP(c, n, side, lead) && !(o.nop && o.nop.has(c.id));
     let s = R(c, o, p ? true : (side === "l" ? lead : false));
     if (p) {
       const plain = o.html ? R(c, {}, true) : s;
-      const [op, cl] = c.t !== "bin" ? ["(", ")"] : /\[/.test(plain) ? ["{", "}"] : /\(/.test(plain) ? ["[", "]"] : ["(", ")"];
+      let [op, cl] = c.t !== "bin" ? ["(", ")"] : /\[/.test(plain) ? ["{", "}"] : /\(/.test(plain) ? ["[", "]"] : ["(", ")"];
+      if (o.html && o.gp && o.gp.has(c.id)) { op = `<span class="gp">${op}</span>`; cl = `<span class="gp">${cl}</span>`; }
       s = op + s + cl;
     }
     return W(c, s, o);
@@ -816,7 +830,12 @@ function buildLesson(src, dir, level) {
 }
 function pieceSteps(L, withCopy) {
   const st = [];
-  if (L.dir === "w2e") L.order.forEach(id => st.push({ type: "piece", id }, { type: "gate", id }));
+  if (L.dir === "w2e") L.order.forEach(id => {
+    if (revWords(L, id)) st.push({ type: "rev", id });
+    else if (orderCheck(L, id)) st.push({ type: "order", id });
+    if (binKids(L.nodes[id]).length) st.push({ type: "group1", id }, { type: "group2", id });
+    st.push({ type: "piece", id }, { type: "gate", id });
+  });
   else {
     if (withCopy) st.push({ type: "copy" });
     L.order.forEach((id, k) => {
@@ -824,6 +843,7 @@ function pieceSteps(L, withCopy) {
       const s = { type: "first", id, done };
       s.opts = shuffle(optsFirst(L, s), makeRng(k * 977 + L.order.length * 31 + 7));
       if (s.opts.length >= 2) st.push(s);
+      if (binKids(L.nodes[id]).length) st.push({ type: "groupwhy", id });
       st.push({ type: "words", id }, { type: "gate", id });
     });
   }
@@ -846,6 +866,8 @@ function mapStyle(st, to) {
 }
 function mutations(n) {
   const out = [];
+  // the same thing with the needed ( ) left off: 8 + 3 × 6 instead of (8 + 3) × 6
+  for (const v of COMM(n.op) ? [n, mk(n.op, n.r, n.l, n.style)] : [n]) { const f = flatOf(v); if (f) out.push({ tree: f, kind: "group", flat: true }); }
   if ((n.op === "-" || n.op === "/" || n.op === "^") && canon(n.l) !== canon(n.r)) out.push({ tree: mk(n.op, n.r, n.l, n.style), kind: "order" });
   if (n.op !== "^") {
     if (n.l.t === "bin" && n.l.op !== "^") out.push({ tree: mk(n.l.op, n.l.l, mk(n.op, n.l.r, n.r, "flat"), "flat"), kind: "group" });
@@ -881,8 +903,11 @@ function optsPiece(L, s, rng) {
     const alt = Object.assign({}, n, { swap: !n.swap });
     opts.push({ html: exprHTML(alt), text: exprText(alt), ok: true, kind: "swap" });
   }
-  const ds = pickDistractors(mutations(base), base, c => exprText(c.tree), opts.map(o => o.text), 4 - opts.length);
-  for (const d of ds) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op });
+  // the no-( ) trap in word order first: "the sum of 8 and 3, then multiplied by 6" → 8 + 3 × 6
+  const wf = flatOf(Object.assign({}, n, { swap: false }));
+  const cands = (wf ? [{ tree: wf, kind: "group", flat: true }] : []).concat(mutations(base));
+  const ds = pickDistractors(cands, base, c => exprText(c.tree), opts.map(o => o.text), 4 - opts.length);
+  for (const d of ds) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op, flat: d.flat });
   return shuffle(opts, rng);
 }
 // expression → words: which words match the highlighted part?
@@ -938,7 +963,7 @@ function msgFirst(L, s, pickId) {
 function optsMcas(L, rng) {
   const tree = L.tree;
   const cands = [];
-  for (const n of opsInOrder(tree)) for (const m of mutations(n)) cands.push({ tree: replaceIn(tree, n.id, m.tree), kind: m.kind, op: m.op, at: n.id });
+  for (const n of opsInOrder(tree)) for (const m of mutations(n)) cands.push({ tree: replaceIn(tree, n.id, m.tree), kind: m.kind, op: m.op, at: n.id, flat: m.flat });
   let opts;
   if (L.dir === "w2e") {
     const base = dispTree(tree);
@@ -948,7 +973,7 @@ function optsMcas(L, rng) {
     if (flips.length && rng() < 0.5) { const f = flips[Math.floor(rng() * flips.length)]; shown = replaceIn(tree, f.id, Object.assign({}, f, { swap: !f.swap })); }
     opts = [{ html: exprHTML(shown), text: exprText(shown), ok: true, kind: "right", tree: shown }];
     const dcands = cands.map(c => Object.assign({}, c, { tree: dispTree(c.tree) }));
-    for (const d of pickDistractors(dcands, base, c => exprText(c.tree), [opts[0].text, exprText(tree)], 3)) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op, at: d.at });
+    for (const d of pickDistractors(dcands, base, c => exprText(c.tree), [opts[0].text, exprText(tree)], 3)) opts.push({ html: exprHTML(d.tree), text: d.text, ok: false, kind: d.kind, op: d.op, at: d.at, flat: d.flat });
   } else {
     const right = fullWords(L);
     opts = [{ text: right, ok: true, kind: "right" }];
@@ -988,12 +1013,10 @@ function hintsFor(L, s) {
   if (!s) return [];
   if (s.type === "piece") {
     const n = L.nodes[s.id], w = ownWords(L, s.id), hs = [H("Key words", keyFact(L, s.id))];
-    if (childNeedsParens(n)) {
-      const [ka, kb] = kids(n), c = [ka, kb].find((k, i) => k.t === "bin" && needP(k, n, i ? "r" : "l", true));
-      const cw = c ? ownWords(L, c.id) : "";
-      hs.push(H("( )", /sum|total/.test(cw) ? "Look for the words “the sum of” — that usually means parentheses around the addition first."
-        : /difference/.test(cw) ? "Look for the words “the difference of” — that usually means parentheses around the subtraction first."
-        : "The green part was done first in the words. Without ( ), × and ÷ would happen before + and −, so put ( ) around the green part."));
+    if (binKids(n).length) {   // when ( ) are needed, the ( ) fact leads — it's the step kids miss
+      const gh = groupHint(L, s.id), wh = wordsHint(L, s.id);
+      if (groupInfo(L, s.id).need) hs.unshift(gh); else hs.push(gh);
+      if (wh) hs.push(wh);
     }
     if (/then/.test(w)) hs.push(H("Then", "“then” means everything before it is finished first. Keep that part together."));
     if (n.op === "-" || n.op === "/" || /less than|from/.test(w)) hs.push(H("Order", "Check the order of the numbers in the phrase. For − and ÷, switching the order changes the answer."));
@@ -1005,6 +1028,9 @@ function hintsFor(L, s) {
     if (childNeedsParens(n)) hs.push(H("( )", "The ( ) part was done first. The words should keep that part together, like “6 times the sum of 8 and 3”."));
     return hs;
   }
+  if (s.type === "group1" || s.type === "group2" || s.type === "groupwhy") return [groupHint(L, s.id)].concat(L.dir === "w2e" && wordsHint(L, s.id) ? [wordsHint(L, s.id)] : [], [H("GEMDAS", "GEMDAS order: Grouping symbols, Exponents, Multiply and Divide (left to right), Add and Subtract (left to right).")]);
+  if (s.type === "order") return [H("Order", "Read the words left to right. For − and ÷, the first number in the words goes first in the expression.")];
+  if (s.type === "rev") { const r = revWords(L, s.id); return [H("Flip", r.hint)]; }
   if (s.type === "first") {
     const hs = [], t = exprText(L.tree);
     if (/[(\[{]/.test(t)) hs.push(H("( )", "Look for ( ) first. Whatever is inside happens before anything outside."));
@@ -1022,6 +1048,7 @@ function hintsFor(L, s) {
 /* ---------- gentle redirects ---------- */
 function msgPiece(L, s, o) {
   const n = L.nodes[s.id], w = ownWords(L, s.id);
+  if (o.flat) return groupRedirect(L, s.id);
   if (o.kind === "op") return `Check the operation. ${keyFact(L, s.id)}`;
   if (o.kind === "order") return /less than|fewer than/.test(w) ? "Check the order. “less than” flips it: start with the number after “less than”, then take away the first one."
     : /from/.test(w) ? "Check the order. Start with the number after “from”, then take away the other one."
@@ -1035,6 +1062,7 @@ function msgWords(L, s, o) {
   return "Check which part goes together. These words group a different part first than the ( ) do.";
 }
 function msgMcas(L, o) {
+  if (o.flat && o.at && L.nodes[o.at] && groupKids(L.nodes[o.at]).length) return groupRedirect(L, o.at);
   if (o.kind === "op") return "Look at the operation words again. One of the signs in this choice doesn't match the words.";
   if (o.kind === "order") return "Check the order of the numbers. For − and ÷, the order matters. “less than” and “subtract … from” flip it.";
   return "Look at what's grouped together. This choice makes a different part happen first.";
@@ -1044,7 +1072,179 @@ function checkPick(L, s, o) {
   if (s.type === "piece") return { ok: false, msg: msgPiece(L, s, o) };
   if (s.type === "words") return { ok: false, msg: msgWords(L, s, o) };
   if (s.type === "first") return { ok: false, msg: msgFirst(L, s, o.id) };
+  if (o.msg) return { ok: false, msg: o.msg };
   return { ok: false, msg: msgMcas(L, o) };
+}
+
+/* ===================== micro-steps: order, flipped words, ( ), read-back ===================== */
+const NAMEOP = { "+": "addition", "-": "subtraction", "*": "multiplication", "/": "division", "^": "exponents" };
+const NOUNOP = { "+": "the sum", "-": "the difference", "*": "the product", "/": "the quotient", "^": "the power" };
+const cap = s => s[0].toUpperCase() + s.slice(1);
+function needsGroup(c, n, side) { return c.t === "bin" && (n.op === "^" ? side === "l" : PREC[c.op] < PREC[n.op] || (PREC[c.op] === PREC[n.op] && side === "r")); }
+function binKids(n) { if (n.t !== "bin") return []; const [a, b] = kids(n); return [[a, "l"], [b, "r"]].filter(([c]) => c.t === "bin"); }
+function groupKids(n) { return binKids(n).filter(([c, sd]) => needsGroup(c, n, sd)).map(([c]) => c); }
+function flatOf(n) { // n written without the ( ) that the order of operations needs
+  const g = groupKids(n); if (!g.length) return null;
+  try { return parseExpr(R(n, { nop: new Set(g.map(c => c.id)) }, true)).tree; } catch (e) { return null; }
+}
+// the top-level piece at the edge of a written part: a number/letter, or a whole ( ) group
+function edgeText(c, side) {
+  while (c.t === "bin") {
+    const [a, b] = kids(c), e = side === "right" ? b : a, sd = side === "right" ? "r" : "l";
+    if (needP(e, c, sd, true)) { const t = exprText(e); return e.t === "bin" ? "(" + t + ")" : "(" + t + ")"; }
+    if (c.op === "^" && side === "right") return exprText(c);
+    c = e;
+  }
+  return exprText(c);
+}
+const niceNum = v => Number.isFinite(v) && Math.abs(v - Math.round(v)) < 1e-9 && Math.abs(v) < 1e7;
+function evalSteps(tree) { // "8 + 3 × 6 = 8 + 18 = 26" (numbers only)
+  if (/[a-z]/.test(exprText(tree))) return null;
+  const parts = [exprText(tree)];
+  let t = tree;
+  for (let k = 0; k < 2 && t.t === "bin"; k++) {
+    const f = opsInOrder(t)[0], v = evalTree(f);
+    if (!niceNum(v)) return null;
+    t = replaceIn(t, f.id, N(String(Math.round(v))));
+    if (t.t === "bin" && k === 1) { const fv = evalTree(t); if (!niceNum(fv)) return null; parts.push("…", numText(String(Math.round(fv)))); return parts.join(" = ").replace("= … =", "= … ="); }
+    parts.push(exprText(t));
+  }
+  if (t.t === "bin") { const fv = evalTree(t); if (!niceNum(fv)) return null; parts.push(numText(String(Math.round(fv)))); }
+  return parts.join(" = ");
+}
+function groupInfo(L, id) {
+  // words → expression: think in the order the words say it ("the sum of 8 and 3, then multiplied by 6" → 8 + 3 × 6)
+  const n = L.dir === "w2e" ? Object.assign({}, L.nodes[id], { swap: false }) : L.nodes[id], bk = binKids(n), kidsN = bk.map(([c]) => c), g = groupKids(n), need = g.length > 0;
+  const nop = new Set(g.map(c => c.id));
+  const flatText = R(n, { nop }, true);
+  let flat = null; try { flat = parseExpr(flatText).tree; } catch (e) {}
+  // the pair that sits right next to the earlier part: 8 + 3 × 6 → "3 × 6"
+  const [a, b] = kids(n), [, side0] = bk[0];
+  let cross;
+  if (n.op === "^") cross = edgeText(a, "right") + exprText(b).split("").map(ch => SUPD[ch] || ch).join("");
+  else cross = side0 === "l" ? `${edgeText(a, "right")} ${SYM[n.op]} ${edgeText(b, "left")}` : `${edgeText(a, "right")} ${SYM[n.op]} ${edgeText(b, "left")}`;
+  const main = g[0] || kidsN[0];
+  const kidTexts = kidsN.map(exprText), gTexts = g.map(exprText);
+  const both = arr => arr.join(" and ");
+  // why
+  const winOp = need ? n.op : main.op, loseOp = need ? main.op : n.op;
+  const reason = winOp === "^" ? "exponents come first in GEMDAS" : PREC[winOp] > PREC[loseOp] ? `${NAMEOP[winOp]} comes before ${NAMEOP[loseOp]} in GEMDAS` : "GEMDAS goes left to right for steps of the same kind";
+  // what the student does now
+  let verb;
+  const other = c => c.t === "bin" ? "that" : exprText(c);
+  if (kidsN.length === 2) verb = { "+": "add them", "-": "subtract the second from the first", "*": "multiply them", "/": "divide the first by the second" }[n.op];
+  else if (n.op === "^") verb = n.r.v === "2" ? "square it" : n.r.v === "3" ? "cube it" : `raise it to the power of ${n.r.v}`;
+  else if (side0 === "l") verb = { "+": `add ${other(b)}`, "-": `subtract ${other(b)}`, "*": `multiply by ${other(b)}`, "/": `divide by ${other(b)}` }[n.op];
+  else verb = { "+": `add it to ${other(a)}`, "-": `subtract it from ${other(a)}`, "*": `multiply ${other(a)} by it`, "/": `divide ${other(a)} by it` }[n.op];
+  const grouped = exprText(n);
+  const vizBad = need && flat ? evalSteps(flat) : null, vizGood = evalSteps(n);
+  let viz = "";
+  if (need && vizBad && vizGood) viz = `<div class="viz"><div class="vz bad">✗ ${esc(vizBad)}</div><div class="vz good">✓ ${esc(vizGood)}</div><div class="vz-note">Same numbers, different answer!</div></div>`;
+  else if (need) viz = `<div class="viz"><div class="vz bad">✗ ${esc(flatText)} does ${esc(cross)} first</div><div class="vz good">✓ ${esc(grouped)} does ${esc(both(gTexts))} first</div></div>`;
+  else if (vizGood) viz = `<div class="viz"><div class="vz good">✓ ${esc(vizGood)}</div><div class="vz-note">${esc(both(kidTexts))} already goes first, so the answer is the same with or without ( ).</div></div>`;
+  return { n, need, g, kidsN, kidTexts, gTexts, kidsText: both(kidTexts), gText: both(gTexts), flatText, cross, reason, verb, viz, noun: NOUNOP[main.op], grouped };
+}
+function groupHint(L, id) {
+  const G = groupInfo(L, id), m = G.g[0] || G.kidsN[0];
+  if (G.need) return H("( )", PREC[G.n.op] > PREC[m.op] || G.n.op === "^"
+    ? `${cap(G.noun)} was done first, but GEMDAS does ${G.n.op === "^" ? "exponents" : SYM[G.n.op]} before ${SYM[m.op]}. Grouping symbols ( ) keep ${G.noun} together so it still goes first.`
+    : `${cap(G.noun)} was done first, but GEMDAS would do ${G.cross} first (left to right). Grouping symbols ( ) keep ${G.noun} together so it still goes first.`);
+  return H("( )", `${cap(G.reason)}, so ${G.kidsText} already happens first. No ( ) needed.`);
+}
+function wordsHint(L, id) { // Thomas's key-words hint, when the earlier part is a sum or difference that needs ( )
+  const G = groupInfo(L, id); if (!G.need) return null;
+  const cw = G.g.map(c => ownWords(L, c.id)).join(" ");
+  if (/sum|total|plus|add/.test(cw)) return H("Key words", "Look for the words “the sum of” — that usually means parentheses around the addition first.");
+  if (/difference|minus|subtract/.test(cw)) return H("Key words", "Look for the words “the difference of” — that usually means parentheses around the subtraction first.");
+  return null;
+}
+function groupRedirect(L, id) {
+  const G = groupInfo(L, id);
+  return `Without ( ), GEMDAS would do <b>${esc(G.cross)}</b> first — that changes the answer:${G.viz}Put ( ) around <b>${esc(G.gText)}</b> so ${G.noun} happens first.`;
+}
+// − and ÷ written in reading order: which comes first?
+function orderCheck(L, id) {
+  const n = L.nodes[id];
+  if (!(n.op === "-" || n.op === "/")) return false;
+  const spl = L.sp[n.l.id], spr = L.sp[n.r.id];
+  if (!spl || !spr || spl[1] <= spl[0] || spr[1] <= spr[0]) return false;     // "half of" has no second number in the words
+  if (canon(n.l) === canon(n.r)) return false;
+  return spl[0] < spr[0];
+}
+const REV = [
+  [/less than/, "“less than”", "5 less than 12 → 12 − 5", "“less than” flips the order. Start with the number after “less than”, then take away the first one."],
+  [/fewer than/, "“fewer than”", "5 fewer than 12 → 12 − 5", "“fewer than” flips the order. Start with the number after “fewer than”."],
+  [/subtracted from/, "“subtracted from”", "5 subtracted from 12 → 12 − 5", "“subtracted from” flips the order. Start with the number after “from”."],
+  [/taken away from|away from/, "“away from”", "5 taken away from 12 → 12 − 5", "“away from” flips the order. Start with the number after “from”."],
+  [/subtract .*from|subtract from/, "“subtract … from”", "subtract 5 from 12 → 12 − 5", "“subtract … from” flips the order. Start with the number after “from”."]];
+const FLIPW = new Set(["less", "fewer", "than", "subtract", "subtracted", "from", "taken", "take", "away"]);
+function revWords(L, id) {
+  const n = L.nodes[id];
+  if (n.op !== "-") return null;
+  const spl = L.sp[n.l.id], spr = L.sp[n.r.id];
+  if (!spl || !spr || spl[1] <= spl[0] || spr[1] <= spr[0] || !(spr[0] < spl[0])) return null;   // the words really are in reverse
+  const w = ownWords(L, id).replace(/\s+/g, " ");
+  for (const [re, name, example, hint] of REV) if (re.test(w)) {
+    const [s, e] = L.sp[id], marks = [];
+    for (let i = s; i < e; i++) if (L.toks[i].o === id && FLIPW.has(L.toks[i].w)) marks.push(i);
+    return { name, example, hint, marks };
+  }
+  return null;
+}
+function optsMicro(L, s) {
+  const n = L.nodes[s.id];
+  if (s.type === "order") {
+    const lt = exprText(n.l), rt = exprText(n.r);
+    const msg = "Look at the words again. Which one do you read first? For − and ÷, the first one in the words goes first in the expression.";
+    return [{ text: lt, ok: true }, { text: rt, ok: false, msg }];
+  }
+  if (s.type === "rev") {
+    const r = revWords(L, s.id);
+    return [{ text: "Yes", ok: false, msg: `Careful! ${r.name} flips the order. Like this: <b>${r.example}</b>. The first number you see does <i>not</i> go first.` }, { text: "No", ok: true }];
+  }
+  const G = groupInfo(L, s.id);
+  if (s.type === "group1") {
+    const opts = G.kidsN.map((c, k) => ({ text: G.kidTexts[k], ok: !G.need,
+      msg: `Not quite. ${G.kidTexts[k]} was first in the words, but without ( ) GEMDAS goes by the signs: ${G.reason}. So <b>${esc(G.cross)}</b> would happen first.${G.viz}` }));
+    if (!opts.some(o => o.text === G.cross)) opts.push({ text: G.cross, ok: G.need, msg: `Not quite. ${cap(G.reason)}, so <b>${esc(G.kidsText)}</b> happens first, even without ( ).` });
+    return opts;
+  }
+  if (s.type === "group2") {
+    const opts = [];
+    opts.push(G.need ? { text: `Put ( ) around ${G.gText}`, ok: true } : { text: `Put ( ) around ${G.kidsText}`, ok: false, msg: `Extra ( ) wouldn't be wrong — but they're not needed here. ${cap(G.reason)}, so ${esc(G.kidsText)} already happens first.` });
+    opts.push(G.need ? { text: "Nothing — it's fine as it is", ok: false, msg: `If we leave it, GEMDAS does <b>${esc(G.cross)}</b> first and the answer changes:${G.viz}` } : { text: "Nothing — no ( ) needed", ok: true });
+    if (!opts.some(o => o.text === `Put ( ) around ${G.cross}`)) opts.push({ text: `Put ( ) around ${G.cross}`, ok: false, msg: `( ) around ${esc(G.cross)} would make that part go first — but the words did ${G.noun} (${esc(G.kidsText)}) first. Group the part that has to go first.` });
+    return opts;
+  }
+  if (s.type === "groupwhy") {
+    if (G.need) return [
+      { text: `So ${G.gText} happens first — without them, ${G.cross} would go first`, ok: true },
+      { text: "They don't change anything", ok: false, msg: `They do! Without them, GEMDAS would do <b>${esc(G.cross)}</b> first:${G.viz}` },
+      { text: `So ${G.cross} happens first`, ok: false, msg: `Look inside the ( ): <b>${esc(G.gText)}</b>. Grouping symbols make what's inside happen first.` }];
+    return [
+      { text: `Yes — ${G.reason}`, ok: true },
+      { text: "No — it needs ( ) to go first", ok: false, msg: `It's OK without them: ${G.reason}, so ${esc(G.kidsText)} already happens first.` }];
+  }
+  return [];
+}
+// read the expression back in GEMDAS order, as plain steps
+function readBack(tree, rank) {
+  const ops = opsInOrder(tree), out = [];
+  const pos = new Map(ops.map((o, k) => [o.id, k]));
+  ops.forEach((n, k) => {
+    const [a, b] = kids(n);
+    const nm = c => c.t !== "bin" ? exprText(c) : (pos.get(c.id) === k - 1 ? "that" : `the answer from ${CIRC[pos.get(c.id) + 1]}`);
+    const A = nm(a), Bt = nm(b);
+    let t;
+    if (n.op === "^") t = n.r.v === "2" ? `square ${A}` : n.r.v === "3" ? `cube ${A}` : `raise ${A} to the power of ${exprText(n.r)}`;
+    else if (k > 0 && A === "that") t = { "+": `add ${Bt}`, "-": `subtract ${Bt}`, "*": `multiply by ${Bt}`, "/": `divide by ${Bt}` }[n.op];
+    else if (k > 0 && Bt === "that" && n.op === "+") t = `add ${A}`;          // + and × don't care about order
+    else if (k > 0 && Bt === "that" && n.op === "*") t = `multiply by ${A}`;
+    else t = { "+": `add ${A} and ${Bt}`, "-": `subtract ${Bt} from ${A}`, "*": `multiply ${A} by ${Bt}`, "/": `divide ${A} by ${Bt}` }[n.op];
+    out.push({ id: n.id, k: k + 1, text: (k === 0 ? (ops.length > 1 ? "First " : "") : "Then ") + t + "." });
+  });
+  if (out.length === 1) out[0].text = cap(out[0].text);
+  return out;
 }
 
 /* ===================== practice problems ===================== */
@@ -1072,16 +1272,17 @@ function genTree(level, rng) {
   };
   const r = rng();
   if (level === 1) {
-    if (r < 0.25) return pair(pick(OPS4), "of")[0];
-    if (r < 0.6 || r >= 0.8) {
+    if (r < 0.2) return pair(pick(OPS4), "of")[0];
+    if (r < 0.4 || r >= 0.8) {           // needs ( ): (a ± b) then × or ÷
       const cmd = r >= 0.8, op2 = pick(["*", "/"]), op1 = pick(["+", "-"]);
       const s1 = cmd ? (op1 === "+" ? "cmd" : "from") : "of", s2 = cmd ? "thenv" : "then";
       if (op2 === "*") return B("*", pair(op1, s1, 15)[0], ri(2, 9), s2, true);
       const c = ri(2, 9), q = ri(2, 9); return B("/", pairWithValue(op1, c * q, s1), c, s2);
     }
-    const op1 = pick(["*", "/"]), op2 = pick(["+", "-"]);
-    const [p, v] = pair(op1, "of");
-    return B(op2, p, op2 === "-" ? ri(1, Math.max(1, v - 1)) : ri(2, 20), "then");
+    // no ( ) needed: (a × b or a ÷ b) then ±, because × and ÷ already come first
+    const op1 = pick(["*", "/"]), op2 = pick(["+", "-"]), cmd = rng() < 0.4;
+    const [p, v] = pair(op1, cmd ? "cmd" : "of");
+    return B(op2, p, op2 === "-" ? ri(1, Math.max(1, v - 1)) : ri(2, 20), cmd ? "thenv" : "then");
   }
   if (level === 2) {
     const k = Math.floor(r * 9);
@@ -1125,7 +1326,7 @@ function evalTree(n, vars) { // only used by tests: practice numbers stay whole 
   return { "+": a + b, "-": a - b, "*": a * b, "/": a / b, "^": a ** b }[n.op];
 }
 function treeNums(n, out) { out = out || []; walk(n, x => { if (x.t === "num") out.push(x.v); }); return out; }
-if (typeof module !== "undefined") module.exports = { KidErr, N, V, B, canon, same, exprText, exprHTML, phrase, phraseText, parseWords, parseExpr, lexWords, buildLesson, walkSteps, optsPiece, optsWords, optsFirst, optsMcas, checkPick, hintsFor, keyFact, generateProblem, genTree, exampleTree, makeRng, evalTree, treeNums, opsInOrder, dispTree, looksLikeWords, pieceWords, fullWords, mutations, countOps };
+if (typeof module !== "undefined") module.exports = { groupInfo, groupKids, binKids, flatOf, orderCheck, revWords, optsMicro, readBack, groupRedirect, groupHint, KidErr, N, V, B, canon, same, exprText, exprHTML, phrase, phraseText, parseWords, parseExpr, lexWords, buildLesson, walkSteps, optsPiece, optsWords, optsFirst, optsMcas, checkPick, hintsFor, keyFact, generateProblem, genTree, exampleTree, makeRng, evalTree, treeNums, opsInOrder, dispTree, looksLikeWords, pieceWords, fullWords, mutations, countOps };
 </script>
 
 <!-- ======================= UI ======================= -->
@@ -1135,7 +1336,22 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem("we-settings") || 
 if (![1, 2, 3].includes(settings.level)) settings.level = 1;
 if (!["w2e", "e2w"].includes(settings.dir)) settings.dir = "w2e";
 // session (not saved): momentum + scaffolding fade per level & direction
-const S = { solved: 0, streak: 0, clean: {}, auto: {}, seen: {}, usedExample: {} };
+const S = { solved: 0, streak: 0, clean: {}, auto: {}, seen: {}, usedExample: {}, micro: {} };
+const MICRO_FADE = 3;          // clean micro-checks in a row (per level) before they shrink to a quicker form
+const MICRO = ["order", "rev", "group1", "group2", "groupwhy"];
+const microKind = t => (t === "group1" || t === "group2" ? "group" : t);
+function microState(kind) { const m = S.micro[P.key] || (S.micro[P.key] = {}); return m[kind] || (m[kind] = { streak: 0, fade: false }); }
+// faded checks: order / flipped-words become a one-line reminder; the ( ) check keeps only its main question
+function applyFade(steps) {
+  const out = [];
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    if ((s.type === "order" || s.type === "rev") && microState(s.type).fade) { const nx = steps.slice(i + 1).find(t => t.type === "piece" && t.id === s.id); if (nx) nx.remind = s.type; continue; }
+    if (s.type === "group1" && microState("group").fade) { const nx = steps[i + 1]; if (nx && nx.type === "group2") nx.quick = true; continue; }
+    out.push(s);
+  }
+  return out;
+}
 const FADE_AFTER = 3;          // clean problems in a row (no hints, no slips) before hints stop popping up
 let P = null, idx = 0, gateLock = false, rightPick = null;
 
@@ -1190,6 +1406,7 @@ function loadLesson(L, key) {
   if (S.auto[key] === undefined) S.auto[key] = true;
   if (S.clean[key] === undefined) S.clean[key] = 0;
   if (key !== "custom") (S.seen[key] || (S.seen[key] = [])).push(canon(P.tree));
+  P.steps = applyFade(P.steps);
   idx = 0; gateLock = false; rightPick = null;
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("mainScreen").classList.remove("hidden");
@@ -1236,12 +1453,23 @@ function optsFor(s) {
   if (s.type === "piece") s.opts = optsPiece(P, s, rng);
   else if (s.type === "words") s.opts = optsWords(P, s, rng);
   else if (s.type === "mcas") s.opts = optsMcas(P, rng);
+  else if (MICRO.includes(s.type)) s.opts = s.type === "rev" ? optsMicro(P, s) : shuffle(optsMicro(P, s), rng);
   return s.opts || [];
 }
 function pick(i) {
   const s = P.steps[idx];
-  if (!["piece", "words", "first", "mcas"].includes(s.type) || rightPick !== null) return;
+  if (!["piece", "words", "first", "mcas"].concat(MICRO).includes(s.type) || rightPick !== null) return;
   const o = optsFor(s)[i], r = checkPick(P, s, o);
+  if (MICRO.includes(s.type) && s.type !== "groupwhy") {
+    const ms = microState(microKind(s.type));
+    if (!r.ok) { ms.streak = 0; ms.fade = false; }
+    else if (!(s.picked || []).length && (s.type !== "group2" || !P.groupSlip)) { if (s.type !== "group1") { ms.streak++; if (ms.streak >= MICRO_FADE) ms.fade = true; } }
+    if (s.type === "group1") P.groupSlip = !r.ok || !!(s.picked || []).length;
+  }
+  if (s.type === "piece" && !r.ok) {   // a slip on the real thing brings the matching check back
+    if (o.flat) Object.assign(microState("group"), { streak: 0, fade: false });
+    if (o.kind === "order") { Object.assign(microState("order"), { streak: 0, fade: false }); Object.assign(microState("rev"), { streak: 0, fade: false }); }
+  }
   if (r.ok) {
     rightPick = i; delete s.coach;
     if (o.kind === "swap") { const n = P.nodes[s.id]; n.swap = !n.swap; s.swapped = true; }
@@ -1267,7 +1495,7 @@ function walkThrough() {
   const s = P.steps[idx];
   if (s.type !== "mcas" || P.walked) return;
   P.walked = true; P.hintTaps++; S.clean[P.key] = 0; S.auto[P.key] = true;
-  P.steps.splice(idx, 0, ...walkSteps(P));
+  P.steps.splice(idx, 0, ...applyFade(walkSteps(P)));
   render();
 }
 function gateTapped(cb) {
@@ -1309,6 +1537,7 @@ function wordsHTML(o) {
   const add = (id, cls) => { const sp = P.sp[id]; if (sp && sp[1] > sp[0]) marks.push([sp[0], sp[1], cls]); };
   if (o.done) for (const id of o.done) if (id !== o.target) add(id, "x-done");
   if (o.target) add(o.target, "x-target");
+  if (o.flag) for (const i of o.flag) marks.push([i, i + 1, "x-flag"]);
   marks.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
   const badgeAt = {};
   if (o.badges) for (const [id, k] of o.badges) {
@@ -1328,14 +1557,19 @@ function wordsHTML(o) {
 function writtenTree() { return P.mcChoice && P.mcChoice.tree ? P.mcChoice.tree : P.tree; }
 function lineFor(s, cur) { // what that step put on paper (cur: the line being written now, with the earlier part in green)
   if (s.type === "copy") return { html: exprHTML(P.tree), words: false };
-  if (s.final) return P.dir === "w2e" ? { html: exprHTML(writtenTree()), words: false } : { html: esc(fullWords(P)), words: true };
-  if (P.dir === "w2e") { const d = cur ? doneSet() : null; if (d) d.delete(s.id); return { html: exprHTML(P.nodes[s.id], d ? { done: d } : {}), words: false, node: s.id }; }
+  if (s.final) { const gp = new Set(); opsInOrder(writtenTree()).forEach(n => groupKids(n).forEach(c => gp.add(c.id))); return P.dir === "w2e" ? { html: exprHTML(writtenTree(), { gp }), words: false } : { html: esc(fullWords(P)), words: true }; }
+  if (P.dir === "w2e") {
+    const d = cur ? doneSet() : null; if (d) d.delete(s.id);
+    const gp = new Set(groupKids(P.nodes[s.id]).map(c => c.id));      // the ( ) added on this line stay coloured
+    return { html: exprHTML(P.nodes[s.id], Object.assign({ gp }, d ? { done: d } : {})), words: false, node: s.id };
+  }
   return { html: esc(pieceWords(P, s.id)), words: true };
 }
 function renderProblem(s) {
   const done = doneSet();
   let o = { done };
-  if (["piece", "words"].includes(s.type)) o.target = s.id;
+  if (["piece", "words"].concat(MICRO).includes(s.type)) o.target = s.id;
+  if (s.type === "rev") o.flag = revWords(P, s.id).marks;
   if (s.type === "gate" && s.id) o.target = s.id;
   if (s.type === "sense" || s.type === "done") o = { badges: P.rank };
   if (s.type === "mcas" || (s.type === "gate" && s.final)) o = {};
@@ -1380,7 +1614,34 @@ function render() {
     if (P.custom && /[*\/x]/i.test(P.src.replace(/[a-wyz]/gi, ""))) notes.push("We use × for times and ÷ for divide.");
     notes.push("Then you'll write it in words, one piece at a time.");
     html += `<div class="gate-note">${notes.join(" ")}</div>` + check;
+  } else if (s.type === "order") {
+    html += `<div class="ask">Which number comes first in the words?<small>For − and ÷, the order matters.</small></div>`;
+    html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
+  } else if (s.type === "rev") {
+    const r = revWords(P, s.id);
+    html += `<div class="ask">The words say <span class="flagw">${esc(r.name.replace(/[“”]/g, ""))}</span>.<br>Does the first number you see come first in the expression?</div>`;
+    html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
+  } else if (s.type === "group1" || s.type === "group2") {
+    const G = groupInfo(P, s.id), justDid = P.steps[idx - 1] && P.steps[idx - 1].type === "group1";
+    if (s.type === "group1" || s.quick) html += `<div class="micro-lead">You already did <b class="expr">${esc(G.kidsText)}</b> first. Now you ${esc(G.verb)}.</div>`;
+    if (s.type === "group1") html += `<div class="ask">Without grouping symbols, which would happen first in <b class="expr">${esc(G.flatText)}</b>?</div>`;
+    else {
+      if (justDid) html += `<div class="did">✓ Right! ${cap(G.reason)}, so <span class="expr">${esc(G.need ? G.cross : G.kidsText)}</span> would go first.</div>${G.viz}`;
+      html += `<div class="ask">What do we need so <b class="expr">${esc(G.kidsText)}</b> still happens first?</div>`;
+    }
+    html += choiceButtons(s, optsFor(s), true, false) + coachBlock() + hintBlock();
+  } else if (s.type === "groupwhy") {
+    const G = groupInfo(P, s.id);
+    html += G.need ? `<div class="ask">Why are there ( ) around <b class="expr">${esc(G.gText)}</b>?</div>` : `<div class="ask">There are no ( ) around <b class="expr">${esc(G.kidsText)}</b>. Does it still happen first?</div>`;
+    html += choiceButtons(s, optsFor(s), true, false) + coachBlock() + hintBlock();
   } else if (s.type === "piece") {
+    const pv = P.steps[idx - 1], notes = [];
+    if (pv && pv.type === "group2" && pv.id === s.id) { const G = groupInfo(P, s.id); notes.push(G.need ? `✓ Put ( ) around <b class="expr">${esc(G.gText)}</b> so ${G.noun} happens first.` : `✓ No ( ) needed — ${G.reason}. <span class="soft">(Extra ( ) wouldn't be wrong, just not needed.)</span>`); }
+    if (pv && pv.type === "rev" && pv.id === s.id) { const r = revWords(P, s.id); notes.push(`✓ Right! ${r.name} flips the order: <b>${r.example}</b>`); }
+    if (pv && pv.type === "order" && pv.id === s.id) notes.push(`✓ <b class="expr">${esc(exprText(P.nodes[s.id].l))}</b> comes first in the words, so it goes first.`);
+    if (s.remind === "rev") { const r = revWords(P, s.id); notes.push(`Remember: ${r.name} flips the order (${r.example}).`); }
+    if (s.remind === "order") notes.push("Remember: for − and ÷, keep the order the words say.");
+    if (notes.length) html += `<div class="micro-note">${notes.join("<br>")}</div>`;
     html += `<div class="ask">What do the <span class="hlw">highlighted words</span> mean?<small>Pick what you would write.</small></div>`;
     html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
   } else if (s.type === "words") {
@@ -1408,16 +1669,20 @@ function render() {
     if (last) note = P.dir === "w2e" ? "That's your whole expression!" : "That's the whole expression in words!";
     else note = P.dir === "w2e" ? "This is what the highlighted words mean." : "These words go with the highlighted part.";
     if (!s.final && P.nodes[s.id] && opsInOrder(P.nodes[s.id]).length > 1) note += P.dir === "w2e" ? " The green part is what you already wrote. Copy it in, just like this." : " The green part is what you already wrote. Use those words inside.";
+    if (P.dir === "w2e" && !s.final && binKids(P.nodes[s.id]).length) {
+      const G = groupInfo(P, s.id);
+      note += G.need ? `<div class="gp-note">Write the <span class="gp">( )</span> around <b class="expr">${esc(G.gText)}</b> — ${G.noun} happens first!</div>` : `<div class="soft">No ( ) needed — ${G.reason}.</div>`;
+    }
     if (P.dir === "w2e" && !s.final && P.nodes[s.id].op === "*" && !isLeaf(P.nodes[s.id].l) !== !isLeaf(P.nodes[s.id].r)) note += " Write the × sign — don't leave it out.";
     html += `<div class="gate-note">${note}</div>` + check;
   } else if (s.type === "sense") {
-    const wt = writtenTree();
-    html += `<div class="ask">🤔 Does the order of operations in your expression match the order of the words?</div>`;
-    html += `<div class="sense"><div class="sense-row"><span class="lbl">The words</span><div class="words">${wordsHTML({ badges: P.rank })}</div></div>`;
-    html += `<div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "Your expression" : "The expression"}</span><div class="expr">${exprHTML(wt, { badges: P.rank })}</div></div>`;
-    html += `<div class="sense-note">${P.order.length > 1 ? "① happens first, then ②" + (P.order.length > 2 ? ", and so on" : "") + ". Check that each number is on the same kind of step in both." : "Check: is it the same operation, with the numbers in the same order?"}</div></div>`;
-    if (!P.roughNo) html += `<div class="input-area"><button class="yn" id="yesBtn" onclick="answerSense(true)">Yes</button><button class="yn" id="noBtn" onclick="answerSense(false)">No</button></div>`;
-    else html += `<div id="feedback" class="feedback coach">Good thinking to check! Find ① in the words and ① in ${P.dir === "w2e" ? "your expression" : "the expression"}. Do they match? Then check ②. Fix any part on your paper that's different.</div><div class="input-area"><button class="check" id="matchBtn" onclick="P.reasonOk=true;advance()">My paper matches now ✓</button></div>`;
+    const wt = writtenTree(), rb = readBack(wt);
+    html += `<div class="ask">🤔 Read it back. Does the order of operations in ${P.dir === "w2e" ? "your expression" : "the expression"} match the order of the words?</div>`;
+    html += `<div class="sense"><div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "Your expression" : "The expression"}</span><div class="expr">${exprHTML(wt, { badges: P.rank })}</div></div>`;
+    html += `<div class="sense-row"><span class="lbl">In GEMDAS order, it says</span><div class="readback" id="readback">${rb.map(r => `<div><span class="ordw">${CIRC[r.k]}</span> ${esc(r.text)}</div>`).join("")}</div></div>`;
+    html += `<div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "The words" : "Your words"}</span><div class="words">${wordsHTML({ badges: P.rank })}</div></div></div>`;
+    if (P.roughNo) html += `<div id="feedback" class="feedback coach">Look again — compare step ① in the read-back with ① in the words, then ②${P.order.length > 2 ? ", and so on" : ""}. Each step should be the same kind of math with the same numbers.</div>`;
+    html += `<div class="input-area"><button class="yn" id="yesBtn" onclick="answerSense(true)">Matches the words</button><button class="yn secondary" id="noBtn" onclick="answerSense(false)">Doesn't match</button></div>`;
   }
   box.innerHTML = html;
   box.classList.toggle("hidden", s.type === "done");
@@ -1437,7 +1702,7 @@ function render() {
   // controls
   document.getElementById("backBtn").disabled = idx === 0 || s.type === "done";
   const hb = document.getElementById("hintBtn");
-  const hintable = ["piece", "words", "first", "mcas"].includes(s.type);
+  const hintable = ["piece", "words", "first", "mcas"].concat(MICRO).includes(s.type);
   hb.disabled = !hs.length || shown >= hs.length;
   hb.className = (hintable ? "" : "hidden ") + (S.auto[P.key] ? "auto" : "faded");
   hb.textContent = shown ? `💡 Another hint (${shown}/${hs.length})` : "💡 Hint";
@@ -1449,7 +1714,7 @@ function render() {
   document.getElementById("bar").style.width = Math.round(100 * idx / total) + "%";
   document.getElementById("progress").textContent = s.type === "done" ? `Solved: ${S.solved} · In a row: ${S.streak}` : `Step ${idx + 1} of ${total}`;
 
-  const focusEl = document.getElementById("gateBox") || document.getElementById("yesBtn") || document.getElementById("matchBtn") || document.querySelector(".choice:not(:disabled)") || document.getElementById("nextBtn");
+  const focusEl = document.getElementById("gateBox") || document.getElementById("yesBtn") || document.querySelector(".choice:not(:disabled)") || document.getElementById("nextBtn");
   if (focusEl && !solOpen) focusEl.focus({ preventScroll: true });
   const target = s.type === "done" ? fin : document.getElementById("controls");
   if (!solOpen && target.getBoundingClientRect().bottom > window.innerHeight) target.scrollIntoView({ block: "end", behavior: "smooth" });
