@@ -178,6 +178,39 @@
     .gate-line.wline { font-size: 1.15rem; } .choices.stack .choice { font-size: 1rem; }
     .seg button { padding: 8px 10px; }
   }
+  /* typed answers */
+  .type-row { display: flex; gap: 8px; justify-content: center; align-items: stretch; flex-wrap: wrap; margin: 10px auto 6px; max-width: 560px; }
+  .type-in { flex: 1 1 220px; min-width: 0; font-size: 1.5rem; padding: 8px 12px; border: 2px solid #0066cc; border-radius: 8px; font-family: "Cambria Math", Cambria, Georgia, serif; text-align: center; min-height: 44px; box-sizing: border-box; }
+  .type-in.words-in { font-family: inherit; font-size: 1.2rem; text-align: left; }
+  .keypad { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin: 6px auto; }
+  .key { background: #f2f8ff; color: #0066cc; border: 2px solid #0066cc; font-size: 1.4rem; font-weight: bold; min-width: 48px; padding: 4px 10px; }
+  .key.del { font-size: 1.15rem; }
+  .alt { text-align: center; margin-top: 2px; }
+  .flag-box { max-width: 560px; margin: 8px auto; background: #fff; border: 2px solid #f0ad4e; border-radius: 10px; padding: 12px 14px; text-align: left; font-size: 1.1rem; line-height: 1.5; }
+  .flag-box .typed { font-size: 1.25rem; margin-bottom: 6px; }
+  .flag-q { margin-top: 8px; font-weight: bold; color: #0b3d75; }
+  .menu { display: flex; flex-direction: column; gap: 8px; max-width: 420px; margin: 10px auto; }
+  .menu-btn { background: white; color: #0066cc; border: 2px solid #0066cc; text-align: left; font-size: 1.12rem; }
+  .menu-btn:hover { background: #f2f8ff; }
+  .slot-help { text-align: center; font-size: 1.1rem; margin: 8px 0; }
+  .slots { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; font-size: 1.7rem; margin: 6px auto 10px; }
+  .slots .tok { padding: 0 2px; }
+  .slot { min-width: 30px; min-height: 48px; padding: 0 4px; background: #fff; border: 2px dashed #8fb8e6; color: #d6336c; font-size: 1.7rem; font-weight: bold; border-radius: 6px; font-family: inherit; }
+  .slot.on { border-style: solid; border-color: #d6336c; background: #fff0f5; }
+  .slot:disabled { opacity: .35; }
+  .sand-out { margin-top: 8px; font-size: 1.02rem; }
+  .sand-out .rb { margin: 4px 0; }
+  .sand-green { color: #1e7e34; font-weight: bold; margin: 6px 0; }
+  .sand-red { color: #a35a00; font-weight: bold; margin: 6px 0; }
+  .hintline.sandbox .type-in { font-size: 1.25rem; }
+  .ok-line { color: #1e7e34; font-weight: bold; font-size: 1.15rem; margin-top: 10px; }
+  .watch { text-align: center; color: #777; font-size: .9rem; margin-top: 8px; }
+  .x-focus { background: #fff3bf; box-shadow: 0 0 0 2px #f2c200; border-radius: 5px; }
+  @media (max-width: 520px) {
+    .type-in { font-size: 1.3rem; flex-basis: 100%; }
+    .keypad { gap: 4px; } .key { min-width: 38px; font-size: 1.2rem; padding: 4px 4px; }
+    .slots, .slot { font-size: 1.35rem; } .slot { min-width: 24px; }
+  }
 </style>
 </head>
 <body>
@@ -1023,9 +1056,10 @@ function hintsFor(L, s) {
     return hs;
   }
   if (s.type === "words") {
-    const n = L.nodes[s.id], hs = [H("Say it", `${SYM[n.op]} can be said ${SAY[n.op]}. Find the choice that uses one of those.`)];
+    const n = L.nodes[s.id], hs = [H("Say it", `${SYM[n.op]} can be said ${SAY[n.op]}. ${s.mode === "type" ? "Use one of those in your words." : "Find the choice that uses one of those."}`)];
     if (n.op === "-" || n.op === "/") hs.push(H("Order", `Check the order of the numbers. ${n.op === "-" ? "“less than” flips the order: 9 − 4 is “4 less than 9”." : "The number before ÷ is the one being divided."}`));
-    if (childNeedsParens(n)) hs.push(H("( )", "The ( ) part was done first. The words should keep that part together, like “6 times the sum of 8 and 3”."));
+    if (childNeedsParens(n)) { const alt = /\b[254]\b/.test(exprText(L.tree)) ? ["3 and 7", "2", "(3 + 7) × 2"] : ["2 and 5", "4", "(2 + 5) × 4"];   // a model that never matches the problem
+      hs.push(H("( )", `The ( ) part was done first. The words should keep that part together and say it first — like “the sum of ${alt[0]}, then multiplied by ${alt[1]}” for ${alt[2]}.`)); }
     return hs;
   }
   if (s.type === "group1" || s.type === "group2" || s.type === "groupwhy") return [groupHint(L, s.id)].concat(L.dir === "w2e" && wordsHint(L, s.id) ? [wordsHint(L, s.id)] : [], [H("GEMDAS", "GEMDAS order: Grouping symbols, Exponents, Multiply and Divide (left to right), Add and Subtract (left to right).")]);
@@ -1247,6 +1281,182 @@ function readBack(tree, rank) {
   return out;
 }
 
+
+/* ===================== typed answers: diagnose, coach, paren slots ===================== */
+// kids type x, *, / and -; we show ×, ÷ and −
+function normTyped(s) { return String(s).replace(/[xX*·]/g, "×").replace(/\//g, "÷").replace(/-/g, "−").replace(/\s+/g, " "); }
+const noSwap = n => n.t === "bin" ? Object.assign({}, n, { l: noSwap(n.l), r: noSwap(n.r), swap: false }) : n;
+const stripP = t => (typeof t === "string" ? t : exprText(t)).replace(/[()\[\]{}]/g, "").replace(/\s+/g, " ").trim();
+// every way a tree can be written with + and × flipped (capped)
+function dispVariants(n, cap0) {
+  const capN = cap0 || 128;
+  if (n.t !== "bin") return [n];
+  const out = [];
+  for (const a of dispVariants(n.l, capN)) for (const b of dispVariants(n.r, capN)) {
+    out.push(Object.assign({}, n, { l: a, r: b, swap: false }));
+    if (COMM(n.op) && canon(a) !== canon(b)) out.push(Object.assign({}, n, { l: a, r: b, swap: true }));
+    if (out.length >= capN) return out;
+  }
+  return out;
+}
+const opWord = { "+": "added", "-": "subtracted", "*": "multiplied", "/": "divided" };
+const kidTxt = c => c.t === "bin" ? `(${exprText(c)})` : exprText(c);
+// "the sum of 8 and 3" — in the order it is written
+function nameOp(n) {
+  const [a, b] = kids(n);
+  if (n.op === "^") return `${kidTxt(a)} ${b.t === "num" && b.v === "2" ? "squared" : b.t === "num" && b.v === "3" ? "cubed" : "to the power of " + exprText(b)}`;
+  return `the ${NOUN[n.op]} of ${kidTxt(a)} and ${kidTxt(b)}`;
+}
+function findParent(root, id) { let p = null; walk(root, x => { if (x.t === "bin" && (x.l.id === id || x.r.id === id)) p = x; }); return p; }
+// "8 and 3 were added first" / "5 was subtracted from 12 first"
+function doneFirst(n) {
+  const [a, b] = kids(n), A = kidTxt(a), Bt = kidTxt(b);
+  if (n.op === "+" || n.op === "*") return `${A} and ${Bt} were ${opWord[n.op]} first`;
+  if (n.op === "-") return `${Bt} was subtracted from ${A} first`;
+  if (n.op === "/") return `${A} was divided by ${Bt} first`;
+  return `${A} was raised to that power first`;
+}
+// "multiplying by 6" — what the parent does with the part X
+function thenDoing(par, X) {
+  const xLeft = par.l.id === X.id, O = kidTxt(xLeft ? par.r : par.l);
+  if (par.op === "*") return `multiplying by ${O}`;
+  if (par.op === "+") return `adding ${O}`;
+  if (par.op === "-") return xLeft ? `subtracting ${O}` : `subtracting it from ${O}`;
+  if (par.op === "/") return xLeft ? `dividing by ${O}` : `dividing ${O} by it`;
+  return "using the exponent";
+}
+// which part of the target the typed tree does not do first, and what it does instead
+function firstMismatch(target, tree) {
+  const tOps = opsInOrder(noSwap(target)), yOps = opsInOrder(tree);
+  const X = tOps.find(o => !yOps.some(y => same(y, o))) || null;
+  const Y = yOps.find(y => !tOps.some(o => same(y, o))) || null;
+  return { X, Y };
+}
+function opTag(o) { return { "+": "+", "-": "−", "*": "×", "/": "÷" }[o]; }
+// the words that name one operation: "the sum of 8 and 3" or "then multiplied by"
+function opWords(L, m) {
+  if (!L.sp[m.id]) return SYM[m.op];
+  if (isLeaf(m.l) && isLeaf(m.r)) return pieceWords(L, m.id);
+  return ownWords(L, m.id).replace(/^[,\s]+/, "").replace(/\s+(and|of)$/, "").trim() || pieceWords(L, m.id);
+}
+const numList = t => { const a = []; walk(t, x => { if (x.t === "num") a.push(numKey(x.v)); if (x.t === "var") a.push(x.name); }); return a.sort().join(","); };
+// diagnose a typed expression for the words of node `id`
+function diagnoseTyped(L, id, tree) {
+  const target = L.nodes[id], wordT = noSwap(target);
+  if (same(tree, target)) return { ok: true, extra: /[()\[\]{}]/.test(exprText(tree)) && !dispVariants(target).some(v => exprText(v) === exprText(tree)) };
+  // 1. same numbers and signs in the same reading order, grouped differently → a ( ) problem
+  const st = stripP(tree);
+  if (dispVariants(target).some(v => stripP(v) === st)) {
+    const { X, Y } = firstMismatch(target, tree);
+    if (X && Y) {
+      const par = findParent(wordT, X.id);
+      let flatOk = false; try { flatOk = same(parseExpr(st).tree, target); } catch (e) {}
+      const msg = `The way you've typed it in, you would not first be finding <b>${esc(nameOp(X))}</b>. The way you've written it, you're finding <b>${esc(nameOp(Y))}</b>.`;
+      if (flatOk) return { ok: false, kind: "parens", extraWrong: true, X, Y, msg: msg + ` Those ( ) change the order. Without them, GEMDAS already does ${esc(exprText(X))} first — try it without the ( ).` };
+      const q = par ? `If the expression requires ${esc(nameOp(X))}, what would you have to do to ensure that ${esc(doneFirst(X))} before ${esc(thenDoing(par, X))}?` : `If the expression requires ${esc(nameOp(X))}, what would you have to do so that happens first?`;
+      return { ok: false, kind: "parens", X, Y, par, msg, question: q, menu: true };
+    }
+  }
+  // 2. − or ÷ written backwards
+  for (const m of opsInOrder(target)) if ((m.op === "-" || m.op === "/") && canon(m.l) !== canon(m.r)) {
+    const t2 = replaceIn(target, m.id, Object.assign({}, m, { l: m.r, r: m.l }));
+    if (same(tree, t2)) {
+      const r = revWords(L, m.id);
+      return { ok: false, kind: "order", at: m.id, msg: r ? `Check the order. ${r.name} flips it: like <b>${r.example}</b>. The first number you see does <i>not</i> go first.` : `Check the order. For ${opTag(m.op)}, the order matters: write the numbers in the order the words say.` };
+    }
+  }
+  // 3. wrong operation word
+  for (const m of opsInOrder(target)) for (const o of OPS4) if (o !== m.op) {
+    const t2 = replaceIn(target, m.id, Object.assign({}, m, { op: o }));
+    if (same(tree, t2)) return { ok: false, kind: "vocab", at: m.id, msg: `Check the operation for “${esc(opWords(L, m))}”. You wrote ${opTag(o)}. ${keyFact(L, m.id)}` };
+  }
+  // 4. different numbers
+  if (numList(tree) !== numList(target)) {
+    const list = []; walk(wordT, x => { if (x.t !== "bin") list.push(exprText(x)); });
+    return { ok: false, kind: "other", msg: `Check the numbers. The highlighted words use ${list.length > 1 ? list.slice(0, -1).join(", ") + " and " + list[list.length - 1] : list[0]}.` };
+  }
+  const { X, Y } = firstMismatch(target, tree);
+  return { ok: false, kind: X && Y ? "parens" : "other", X, Y, msg: X && Y ? `Not quite. The way you've written it, you're finding <b>${esc(nameOp(Y))}</b> first, but the words find <b>${esc(nameOp(X))}</b> first.` : "Not quite. Read the highlighted words again, one piece at a time." };
+}
+// "Move the 6": does moving the outside number fix it?
+function moveInfo(L, id, X, typed) {
+  const target = L.nodes[id], wordT = clone(noSwap(target)), par = findParent(wordT, X.id);
+  if (!par) return null;
+  const xLeft = par.l.id === X.id, O = xLeft ? par.r : par.l, Ot = kidTxt(O);
+  const st = stripP(typed), toFront = !st.startsWith(stripP(O) + " ");
+  if (!COMM(par.op)) return { O: Ot, fixes: false, text: null, msg: `For ${opTag(par.op)}, the order matters — moving the ${esc(Ot)} would change the meaning. The order of the numbers is already right; what's missing is something that makes ${esc(nameOp(X))} happen first.` };
+  par.swap = toFront ? xLeft : !xLeft;     // put O at the front (or the end)
+  const text = R(wordT, { nop: new Set([X.id]) }, true);
+  let mt = null; try { mt = parseExpr(text).tree; } catch (e) {}
+  if (mt && same(mt, target)) return { O: Ot, fixes: true, text, tree: mt, msg: `Yes! Moving the ${esc(Ot)} ${toFront ? "to the front" : "to the end"} gives <b>${esc(text)}</b>, and GEMDAS does ${esc(nameOp(X))} first. That works here.` };
+  const f = mt ? opsInOrder(mt)[0] : null, bad = mt ? evalSteps(mt) : null, good = evalSteps(target);
+  const viz = bad && good ? `<div class="viz"><div class="vz bad">✗ ${esc(bad)}</div><div class="vz good">✓ ${esc(good)}</div></div>` : "";
+  return { O: Ot, fixes: false, text, tree: mt, msg: `Moving the ${esc(Ot)} ${toFront ? "to the front" : "to the end"} gives <b>${esc(text)}</b>. GEMDAS still does ${f ? `${esc(NAMEOP[f.op])} first: <b>${esc(nameOp(f))}</b>` : "a different part first"} — so ${esc(nameOp(X))} still doesn't happen first.${viz}Moving alone isn't enough here. Something has to keep ${esc(exprText(X))} together.` };
+}
+// paren slots: the student's expression as tokens, with no ( )
+function slotTokens(text) { return (stripP(text).match(/\d+(?:\.\d+)?|[a-z]|[⁰¹²³⁴⁵⁶⁷⁸⁹]+|[+−×÷]|\S/g) || []); }
+function slotBase(typed) {
+  const toks = slotTokens(exprText(typed));
+  try { if (stripP(exprText(parseExpr(toks.join(" ")).tree)) !== stripP(typed)) return null; } catch (e) { return null; }
+  return toks;
+}
+const joinToks = toks => toks.join(" ").replace(/\( /g, "(").replace(/ \)/g, ")").replace(/ ([⁰¹²³⁴⁵⁶⁷⁸⁹]+)/g, "$1");
+// place ( at slot i and ) at slot j (slot k sits just before token k)
+function placeParens(toks, i, j) { const t = toks.slice(); t.splice(j, 0, ")"); t.splice(i, 0, "("); return t; }
+function spanOf(toks, X) { // token span of X (ignoring ( ) tokens)
+  const pos = [], seq = [];
+  toks.forEach((t, k) => { if (!/[()]/.test(t)) { pos.push(k); seq.push(t); } });
+  for (const v of dispVariants(X)) {
+    const xs = slotTokens(exprText(v));
+    for (let s = 0; s + xs.length <= seq.length; s++) if (xs.every((t, q) => seq[s + q] === t)) return [pos[s], pos[s + xs.length - 1] + 1];
+  }
+  return null;
+}
+function checkSlots(L, id, X, toks, i, j) {
+  const target = L.nodes[id], span = spanOf(toks, X), placed = placeParens(toks, i, j);
+  let tree = null; try { tree = parseExpr(joinToks(placed)).tree; } catch (e) {}
+  if (tree && same(tree, target)) return { ok: true, done: true, toks: placed, tree, msg: `✓ <b>${esc(exprText(tree))}</b> — now ${esc(exprText(X))} happens first!` };
+  if (tree && opsInOrder(tree).some(y => same(y, X))) {
+    const { X: X2 } = firstMismatch(target, tree);
+    return { ok: true, done: false, toks: placed, tree, X2, msg: `✓ Now ${esc(exprText(X))} happens first. Next, ${esc(nameOp(X2 || X))} has to happen first too. Place another ( ).` };
+  }
+  const goodOpen = span && i === span[0], goodClose = span && j === span[1];
+  const first = span ? toks[span[0]] : "", last = span ? toks[span[1] - 1] : "";
+  let msg;
+  if (goodOpen && !goodClose) msg = `Your ( is in the right spot. Now move the ) so it comes right after the ${esc(last)}.`;
+  else if (!goodOpen && goodClose) msg = `Your ) is in the right spot. The ( needs to go right before the ${esc(first)}.`;
+  else {
+    const f = tree ? opsInOrder(tree)[0] : null;
+    msg = (f ? `With the ( ) there, GEMDAS would first find <b>${esc(nameOp(f))}</b>. ` : "") + `We need <b>${esc(nameOp(X))}</b> first. The ( ) go around just the numbers you ${esc({ "+": "add", "-": "subtract", "*": "multiply", "/": "divide" }[X.op] || "use")}.`;
+  }
+  return { ok: false, keepOpen: !!goodOpen, keepClose: !!goodClose, msg };
+}
+// expression → words: diagnose words the student typed for node `id`
+function diagnoseWords(L, id, raw) {
+  const text = String(raw).trim().replace(/\s+/g, " ");
+  if (!text) return { ok: false, kind: "empty", msg: "Type your words first." };
+  let p;
+  try { p = parseWords(text); } catch (e) {
+    const m = /word “([^”]+)”/.exec(e.message || "");
+    return { ok: false, kind: "unparsed", msg: (m ? `I don't know the word “${esc(m[1])}” yet. ` : "I couldn't read those words yet. ") + "Try math words like “the sum of 8 and 3”, “times”, “less than”, and “then”." };
+  }
+  const target = L.nodes[id], tree = p.tree;
+  if (same(tree, target)) return { ok: true, text, tree };
+  const { X, Y } = firstMismatch(target, tree);
+  const gWords = X && L.sp[X.id] ? pieceWords(L, X.id) : X ? nameOp(X) : "";
+  const st = stripP(tree);
+  if (X && Y && dispVariants(target).some(v => stripP(v) === st) && !/,|\bthen\b|\bafter\b|\bquantity\b/.test(text))
+    return { ok: false, kind: "parens", ambiguous: true, X, Y, msg: `Your words don't make it clear that the ${NAMEOP[X.op]} happens first. Someone reading “${esc(text)}” would do <b>${esc(exprText(Y))}</b> first. Lead with the grouped part — use “the ${NOUN[X.op]} of” language. Start with “${esc(gWords)}.”` };
+  for (const m of opsInOrder(target)) if ((m.op === "-" || m.op === "/") && canon(m.l) !== canon(m.r) && same(tree, replaceIn(target, m.id, Object.assign({}, m, { l: m.r, r: m.l }))))
+    return { ok: false, kind: "order", msg: `Check the order. Your words mean <b>${esc(exprText(tree))}</b>. For ${opTag(m.op)}, the order matters${m.op === "-" ? " — and “less than” flips it" : ""}.` };
+  for (const m of opsInOrder(target)) for (const o of OPS4) if (o !== m.op && same(tree, replaceIn(target, m.id, Object.assign({}, m, { op: o }))))
+    return { ok: false, kind: "vocab", msg: `Check your operation words. Your words mean <b>${esc(exprText(tree))}</b>. ${opTag(m.op)} can be said ${SAY[m.op]}.` };
+  if (numList(tree) !== numList(target)) return { ok: false, kind: "other", msg: `Check the numbers. Your words mean <b>${esc(exprText(tree))}</b>, but the expression is <b>${esc(exprText(target))}</b>.` };
+  if (X && Y && opsInOrder(tree)[0] === Y)
+    return { ok: false, kind: "parens", firstWrong: true, X, Y, msg: `Your words put ${NAMEOP[Y.op]} first (${esc(nameOp(Y))}). But the ( ) mean the ${NAMEOP[X.op]} happens first. Start with “${esc(gWords)}.”` };
+  return { ok: false, kind: "other", msg: `Your words mean <b>${esc(exprText(tree))}</b>. That's not the same as <b>${esc(exprText(target))}</b> yet. Check the numbers and the operation words.` };
+}
+
 /* ===================== practice problems ===================== */
 function makeRng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const VARS = ["n", "m", "p", "y", "k", "t", "w"];
@@ -1326,7 +1536,7 @@ function evalTree(n, vars) { // only used by tests: practice numbers stay whole 
   return { "+": a + b, "-": a - b, "*": a * b, "/": a / b, "^": a ** b }[n.op];
 }
 function treeNums(n, out) { out = out || []; walk(n, x => { if (x.t === "num") out.push(x.v); }); return out; }
-if (typeof module !== "undefined") module.exports = { groupInfo, groupKids, binKids, flatOf, orderCheck, revWords, optsMicro, readBack, groupRedirect, groupHint, KidErr, N, V, B, canon, same, exprText, exprHTML, phrase, phraseText, parseWords, parseExpr, lexWords, buildLesson, walkSteps, optsPiece, optsWords, optsFirst, optsMcas, checkPick, hintsFor, keyFact, generateProblem, genTree, exampleTree, makeRng, evalTree, treeNums, opsInOrder, dispTree, looksLikeWords, pieceWords, fullWords, mutations, countOps };
+if (typeof module !== "undefined") module.exports = { normTyped, stripP, dispVariants, nameOp, diagnoseTyped, moveInfo, slotTokens, slotBase, placeParens, joinToks, spanOf, checkSlots, diagnoseWords, firstMismatch, groupInfo, groupKids, binKids, flatOf, orderCheck, revWords, optsMicro, readBack, groupRedirect, groupHint, KidErr, N, V, B, canon, same, exprText, exprHTML, phrase, phraseText, parseWords, parseExpr, lexWords, buildLesson, walkSteps, optsPiece, optsWords, optsFirst, optsMcas, checkPick, hintsFor, keyFact, generateProblem, genTree, exampleTree, makeRng, evalTree, treeNums, opsInOrder, dispTree, looksLikeWords, pieceWords, fullWords, mutations, countOps };
 </script>
 
 <!-- ======================= UI ======================= -->
@@ -1336,7 +1546,7 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem("we-settings") || 
 if (![1, 2, 3].includes(settings.level)) settings.level = 1;
 if (!["w2e", "e2w"].includes(settings.dir)) settings.dir = "w2e";
 // session (not saved): momentum + scaffolding fade per level & direction
-const S = { solved: 0, streak: 0, clean: {}, auto: {}, seen: {}, usedExample: {}, micro: {} };
+const S = { solved: 0, streak: 0, clean: {}, auto: {}, seen: {}, usedExample: {}, micro: {}, mist: { parens: 0, vocab: 0, order: 0 }, mistLast: null };
 const MICRO_FADE = 3;          // clean micro-checks in a row (per level) before they shrink to a quicker form
 const MICRO = ["order", "rev", "group1", "group2", "groupwhy"];
 const microKind = t => (t === "group1" || t === "group2" ? "group" : t);
@@ -1402,11 +1612,11 @@ function loadRandom(lv, dir) {
 }
 function loadLesson(L, key) {
   P = L;
-  P.key = key; P.seed = Math.floor(Math.random() * 1e9); P.revealed = false; P.hintTaps = 0; P.wrongs = 0; P.finished = false; P.roughNo = false; P.reasonOk = false; P.fadedNow = false; P.walked = false; P.mcChoice = null;
+  P.key = key; P.seed = Math.floor(Math.random() * 1e9); P.revealed = false; P.hintTaps = 0; P.wrongs = 0; P.finished = false; P.roughNo = false; P.reasonOk = false; P.fadedNow = false; P.walked = false; P.mcChoice = null; P.myWords = null;
   if (S.auto[key] === undefined) S.auto[key] = true;
   if (S.clean[key] === undefined) S.clean[key] = 0;
   if (key !== "custom") (S.seen[key] || (S.seen[key] = [])).push(canon(P.tree));
-  P.steps = applyFade(P.steps);
+  P.steps = applyTyping(applyFade(P.steps));
   idx = 0; gateLock = false; rightPick = null;
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("mainScreen").classList.remove("hidden");
@@ -1433,7 +1643,10 @@ function goBack() {
   render();
 }
 function resetStep(s) {
-  delete s.coach; delete s.picked;
+  delete s.coach; delete s.picked; delete s._hs;
+  if (s.swapSave) { for (const [id, v] of s.swapSave) P.nodes[id].swap = v; delete s.swapSave; }
+  if (s.accepted && s.type === "words") P.myWords = null;
+  delete s.accepted; delete s.flag; delete s.cm; delete s.sl; delete s.mv; delete s.okMsg; s.rewrite = false;
   if (s.swapped) { const n = P.nodes[s.id]; n.swap = !n.swap; s.swapped = false; }
   if (s.type === "mcas") P.mcChoice = null;
 }
@@ -1480,12 +1693,12 @@ function pick(i) {
   }
   (s.picked || (s.picked = [])).push(i);
   s.coach = r.msg; P.wrongs++;
-  const hs = hintsFor(P, s);
-  if (S.auto[P.key] && s.picked.length >= 2 && (s.hints || 0) < hs.length) s.hints = (s.hints || 0) + 1;   // scaffolding: a hint pops up by itself
+  const kind = kindOfPick(s, o); mistake(kind);
+  autoHint(s, kind);   // scaffolding: a hint pops up by itself (sooner for this sitting's most common mistake)
   render();
 }
 function tapHint() {
-  const s = P.steps[idx], hs = hintsFor(P, s);
+  const s = P.steps[idx], hs = hintsUI(s);
   if (!hs.length || (s.hints || 0) >= hs.length) return;
   s.hints = (s.hints || 0) + 1;
   P.hintTaps++; S.clean[P.key] = 0; S.auto[P.key] = true;     // tapping hints brings the scaffolding back
@@ -1529,6 +1742,265 @@ function showSolution() {
 }
 function hideSolution() { document.getElementById("solution").classList.add("hidden"); render(); }
 
+/* ---------- typed answers ---------- */
+// words → expression: the combining steps and the whole expression are typed; expression → words: the whole phrase
+function applyTyping(steps) {
+  const last = P.order[P.order.length - 1];
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    if (P.dir === "w2e" && s.type === "piece" && (s.id === last || binKids(P.nodes[s.id]).length)) {
+      s.mode = "type"; s.pre = [];
+      // the ( ) questions wait: typing first, coaching if needed (they come back with "Show choices")
+      while (i > 0 && (steps[i - 1].type === "group1" || steps[i - 1].type === "group2") && steps[i - 1].id === s.id) { s.pre.unshift(steps.splice(i - 1, 1)[0]); i--; }
+    }
+    if (P.dir === "e2w" && s.type === "words" && s.id === last) s.mode = "type";
+  }
+  return steps;
+}
+const hasVarX = () => /\bx\b/.test(exprText(P.tree));
+const normIn = v => hasVarX() ? v.replace(/\*/g, "×").replace(/\//g, "÷").replace(/-/g, "−") : normTyped(v);
+function keypad(target) {
+  const keys = ["×", "÷", "+", "−", "(", ")"];
+  return `<div class="keypad" data-for="${target}">${keys.map(k => `<button type="button" class="key" data-k="${k}" onpointerdown="event.preventDefault()" onclick="keyIns('${target}','${k}')">${k}</button>`).join("")}<button type="button" class="key del" data-k="del" aria-label="Delete" onpointerdown="event.preventDefault()" onclick="keyIns('${target}','⌫')">⌫</button></div>`;
+}
+function keyIns(target, k) {
+  const el = document.getElementById(target); if (!el) return;
+  const a = el.selectionStart == null ? el.value.length : el.selectionStart, b = el.selectionEnd == null ? a : el.selectionEnd;
+  let v = el.value, pos;
+  if (k === "⌫") { const st = a === b ? Math.max(0, a - 1) : a; v = v.slice(0, st) + v.slice(b); pos = st; }
+  else { const ins = /[()]/.test(k) ? k : ` ${k} `; v = v.slice(0, a) + ins + v.slice(b); pos = a + ins.length; }
+  el.value = v; el.focus(); try { el.setSelectionRange(pos, pos); } catch (e) {}
+  if (target === "sandIn") sandInput(el); else typeInput(el);
+}
+function typeInput(el) {   // live: x * / - become × ÷ −
+  const pos = el.selectionStart == null ? el.value.length : el.selectionStart;
+  const before = normIn(el.value.slice(0, pos)), all = normIn(el.value);
+  if (all !== el.value) { el.value = all; try { el.setSelectionRange(before.length, before.length); } catch (e) {} }
+  P.steps[idx].typedText = el.value;
+}
+function typedBox(id, value, onCheck, words) {
+  return `<div class="type-row"><input id="${id}" class="type-in ${words ? "words-in" : ""}" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(value || "")}"
+    placeholder="${words ? "Type your words…" : "Type it here"}" aria-label="${words ? "Your words" : "Your expression"}"
+    oninput="${words ? "P.steps[idx].typedText=this.value" : "typeInput(this)"}" onkeydown="if(event.key==='Enter'){event.preventDefault();${onCheck}}">
+    <button id="${id === "typeIn" ? "typeCheck" : "wordsCheck"}" class="check" onclick="${onCheck}">Check</button></div>`;
+}
+/* session-only mistake tracking (resets on reload; nothing is saved) */
+const MIST_NAME = { parens: "( )", vocab: "operation words", order: "number order (− and ÷)" };
+function mistake(kind) { if (S.mist[kind] === undefined) return; S.mist[kind]++; S.mistLast = kind; }
+function topMistake() {
+  const ks = Object.keys(S.mist).filter(k => S.mist[k] >= 2);
+  if (!ks.length) return null;
+  const m = Math.max(...ks.map(k => S.mist[k])), top = ks.filter(k => S.mist[k] === m);
+  return top.includes(S.mistLast) ? S.mistLast : top[0];
+}
+function kindOfPick(s, o) {
+  if (["group1", "group2", "groupwhy", "first"].includes(s.type)) return "parens";
+  if (s.type === "order" || s.type === "rev") return "order";
+  if (o.flat || o.kind === "group") return "parens";
+  if (o.kind === "op") return "vocab";
+  if (o.kind === "order") return "order";
+  return "";
+}
+function hintCat(h) {
+  if (h.sandbox) return "sandbox";
+  const t = h.tag + " " + h.text;
+  if (/\( \)|parenthes|Grouping|^Then|^GEMDAS/.test(t)) return "parens";
+  if (/^(Order|Flip)/.test(h.tag) || /order of the numbers|flips/.test(t)) return "order";
+  if (/^Key words/.test(h.tag)) return "vocab";
+  return "";
+}
+// hints, with this sitting's most common mistake first (frozen once a hint is showing)
+function hintsUI(s) {
+  if (s._hs && s.hints) return s._hs;
+  let hs = hintsFor(P, s).slice();
+  const top = topMistake();
+  if (top) hs = hs.filter(h => hintCat(h) === top).concat(hs.filter(h => hintCat(h) !== top));
+  if (s.type === "piece" && s.mode === "type") hs.splice(Math.min(1, hs.length), 0, { tag: "🧪 Try it", sandbox: true, text: "" });
+  s._hs = hs;
+  return hs;
+}
+function autoHint(s, kind) {
+  const hs = hintsUI(s), slips = (s.picked || []).length + (s.tries || 0), top = topMistake();
+  if (S.auto[P.key] && !s.cm && (slips >= 2 || (top && kind === top)) && (s.hints || 0) < hs.length) s.hints = (s.hints || 0) + 1;
+}
+// accept a typed (or fixed) expression and move on to the paper step
+function acceptTyped(tree, how, okMsg) {
+  const s = P.steps[idx];
+  if (rightPick !== null || s.type !== "piece") return;
+  const n = P.nodes[s.id], tt = exprText(tree);
+  const comm = opsInOrder(n).filter(x => COMM(x.op));
+  if (!s.swapSave) s.swapSave = new Map(comm.map(x => [x.id, x.swap]));
+  let found = exprText(n) === tt;
+  // write it the way the student did: flip this step's sign first, then anything else not yet written
+  if (!found && COMM(n.op)) { n.swap = !n.swap; found = exprText(n) === tt; if (!found) n.swap = !n.swap; }
+  for (let mask = 1; !found && mask < (1 << Math.min(comm.length, 8)); mask++) {
+    comm.forEach((x, k) => { x.swap = !!(mask >> k & 1) !== s.swapSave.get(x.id); });
+    found = exprText(n) === tt;
+  }
+  if (!found) for (const [id, v] of s.swapSave) P.nodes[id].swap = v;
+  s.accepted = { tree, how, text: tt, asTyped: found };
+  s.okMsg = okMsg || "✓ Correct!";
+  s.coach = null; s.cm = null;
+  rightPick = -1;
+  render();
+  setTimeout(() => { if (P.steps[idx] === s) advance(); }, 750);
+}
+function checkTyped() {
+  const s = P.steps[idx];
+  if (rightPick !== null || s.type !== "piece") return;
+  const el = document.getElementById("typeIn"), raw = el ? el.value : (s.typedText || "");
+  s.typedText = raw;
+  if (!raw.trim()) { s.coach = "Type the expression first. Use the keys for × ÷ ( )."; render(); return; }
+  let p;
+  try { p = parseExpr(normIn(raw)); } catch (e) { s.coach = esc(e.kid ? e.message : "Something doesn't look right. Check what you typed."); render(); return; }
+  const d = diagnoseTyped(P, s.id, p.tree);
+  if (d.ok) {
+    s.implicitTyped = p.implicit;
+    acceptTyped(p.tree, "typed", d.extra ? "✓ Correct! Your extra ( ) aren't wrong — they're just not needed here." : s.rewrite ? "✓ Correct! Starting with the grouped part did it." : "✓ Correct!");
+    return;
+  }
+  mistake(d.kind); P.wrongs++; s.tries = (s.tries || 0) + 1;
+  s.typedTree = p.tree; s.rewrite = false; s.sl = null; s.mv = null;
+  if (d.kind === "parens") Object.assign(microState("group"), { streak: 0, fade: false });
+  if (d.kind === "order") Object.assign(microState("order"), { streak: 0, fade: false });
+  if (d.menu) { s.flag = d; s.cm = "menu"; s.coach = null; }
+  else { s.flag = null; s.cm = null; s.coach = d.msg; }
+  autoHint(s, d.kind);
+  render();
+}
+function coachPick(k) {
+  const s = P.steps[idx], d = s.flag; if (!d || rightPick !== null) return;
+  s.coach = null;
+  if (k === "menu") { s.cm = "menu"; s.sl = null; }
+  else if (k === "paren") {
+    const toks = slotBase(s.typedTree);
+    if (!toks) { s.cm = "rewrite"; s.rewrite = true; s.typedText = ""; }
+    else { s.cm = "slots"; s.sl = { toks, open: null, close: null, X: d.X, msg: "", good: "" }; }
+  } else if (k === "move") {
+    const mv = moveInfo(P, s.id, d.X, s.typedTree);
+    s.mv = mv;
+    if (mv && mv.fixes) { acceptTyped(mv.tree, "move", "✓ " + mv.msg.replace(/^Yes! /, "Yes! ")); return; }
+    s.cm = "move";
+  } else if (k === "rewrite") { s.cm = null; s.rewrite = true; s.typedText = ""; }
+  render();
+  if (k === "rewrite") { const el = document.getElementById("typeIn"); if (el) el.focus(); }
+}
+function tapSlot(k) {
+  const s = P.steps[idx], sl = s.sl; if (!sl || rightPick !== null) return;
+  if (k === sl.open) sl.open = null;
+  else if (k === sl.close) sl.close = null;
+  else if (sl.open === null && (sl.close === null || k < sl.close)) sl.open = k;
+  else if (sl.open !== null && sl.close === null && k > sl.open) sl.close = k;
+  else return;
+  sl.msg = ""; sl.good = "";
+  if (sl.open !== null && sl.close !== null) {
+    const r = checkSlots(P, s.id, sl.X, sl.toks, sl.open, sl.close);
+    if (r.ok && r.done) { acceptTyped(r.tree, "slots", r.msg); return; }
+    if (r.ok) { sl.toks = r.toks; sl.X = r.X2 || sl.X; sl.open = sl.close = null; sl.good = r.msg; }
+    else { mistake("parens"); P.wrongs++; sl.msg = r.msg; if (!r.keepOpen) sl.open = null; if (!r.keepClose) sl.close = null; }
+  }
+  render();
+}
+function showChoices() {
+  const s = P.steps[idx]; if (rightPick !== null) return;
+  s.mode = "choices"; s.flag = null; s.cm = null; s.coach = null; s.rewrite = false; s.sl = null; delete s._hs;
+  if (s.pre && s.pre.length) { P.steps.splice(idx, 0, ...s.pre); s.pre = []; }
+  render();
+}
+function sandOutHTML(s) {
+  const v = (s.sandText || "").trim();
+  if (!v) return `<span class="soft">Type a version — you'll see what happens first.</span>`;
+  let tree;
+  try { tree = parseExpr(normIn(v)).tree; } catch (e) { return `<span class="soft">Keep going… ${esc(e.kid ? e.message : "")}</span>`; }
+  const rb = readBack(tree).map(r => `<div class="rb"><span class="ordw">${CIRC[r.k]}</span> ${esc(r.text)}</div>`).join("");
+  const d = diagnoseTyped(P, s.id, tree);
+  if (d.ok) return `<div class="sand-green" id="sandLight">🟢 Green light! The order matches the words.</div><div><b>What happens first in yours:</b>${rb}</div><button id="sandUse" onclick="sandUse()">Use this on my paper →</button>`;
+  const why = d.X && d.Y ? ` The words find ${esc(nameOp(d.X))} first, but yours finds ${esc(nameOp(d.Y))} first.` : " That doesn't match the words yet.";
+  return `<div class="sand-red" id="sandLight">🔴 Not yet.${why}</div><div><b>What happens first in yours:</b>${rb}</div>`;
+}
+function sandboxHTML(s) {
+  return `<div class="hintline sandbox"><span class="tag">🧪 Try it</span>Type a version here and see what happens first.
+    <div class="type-row"><input id="sandIn" class="type-in" autocomplete="off" spellcheck="false" value="${esc(s.sandText || "")}" placeholder="Try a version" aria-label="Try a version" oninput="sandInput(this)"></div>
+    ${keypad("sandIn")}<div id="sandOut" class="sand-out">${sandOutHTML(s)}</div></div>`;
+}
+function sandInput(el) {
+  const pos = el.selectionStart == null ? el.value.length : el.selectionStart;
+  const before = normIn(el.value.slice(0, pos)), all = normIn(el.value);
+  if (all !== el.value) { el.value = all; try { el.setSelectionRange(before.length, before.length); } catch (e) {} }
+  const s = P.steps[idx]; s.sandText = el.value;
+  document.getElementById("sandOut").innerHTML = sandOutHTML(s);
+}
+function sandUse() {
+  const s = P.steps[idx];
+  let tree; try { tree = parseExpr(normIn(s.sandText || "")).tree; } catch (e) { return; }
+  if (!diagnoseTyped(P, s.id, tree).ok) return;
+  s.typedText = s.sandText;
+  acceptTyped(tree, "sandbox", "✓ Green light! Your version matches the words.");
+}
+function checkWords() {
+  const s = P.steps[idx];
+  if (rightPick !== null || s.type !== "words") return;
+  const el = document.getElementById("wordsIn"), raw = el ? el.value : (s.typedText || "");
+  s.typedText = raw;
+  const d = diagnoseWords(P, s.id, raw);
+  if (d.ok) {
+    P.myWords = d.text; s.accepted = { text: d.text }; s.okMsg = "✓ Your words match the expression!"; s.coach = null;
+    rightPick = -1; render();
+    setTimeout(() => { if (P.steps[idx] === s) advance(); }, 750);
+    return;
+  }
+  if (d.kind !== "empty" && d.kind !== "unparsed") { mistake(d.kind); P.wrongs++; s.tries = (s.tries || 0) + 1; }
+  s.coach = d.msg; autoHint(s, d.kind);
+  render();
+}
+function typedPieceHTML(s, coachBlock, hintBlock) {
+  let html = "";
+  const d = s.flag;
+  if (s.accepted) return `<div class="ok-line" id="okLine">${s.okMsg}</div>`;
+  if (s.cm === "menu" || s.cm === "move" || s.cm === "slots") {
+    html += `<div class="flag-box" id="flagBox"><div class="typed">You typed: <b class="expr">${esc(exprText(s.typedTree))}</b></div>${d.msg}${s.cm !== "slots" ? `<div class="flag-q" id="flagQ">${d.question}</div>` : ""}</div>`;
+    if (s.cm === "menu") {
+      const mv = findParentName(d);
+      html += `<div class="menu" id="coachMenu"><button class="menu-btn" id="mParen" onclick="coachPick('paren')">➕ Add parentheses</button>${mv ? `<button class="menu-btn" id="mMove" onclick="coachPick('move')">↔️ Move the ${esc(mv)}</button>` : ""}<button class="menu-btn" id="mRewrite" onclick="coachPick('rewrite')">✏️ Rewrite the expression</button></div>`;
+    } else if (s.cm === "move") {
+      html += `<div id="feedback" class="feedback coach">${s.mv ? s.mv.msg : "Moving alone isn't enough here."}</div>`;
+      html += `<div class="menu"><button class="menu-btn" id="mParen" onclick="coachPick('paren')">➕ Add parentheses</button><button class="menu-btn" id="mRewrite" onclick="coachPick('rewrite')">✏️ Rewrite the expression</button></div>`;
+    } else {
+      const sl = s.sl;
+      html += `<div class="slot-help" id="slotHelp">${sl.open === null ? "Tap the box where the <b>(</b> goes." : "Now tap the box where the <b>)</b> goes."}</div><div class="slots expr" id="slots">`;
+      for (let k = 0; k <= sl.toks.length; k++) {
+        const on = k === sl.open ? "(" : k === sl.close ? ")" : "";
+        const dis = sl.open !== null && sl.close === null && k < sl.open;
+        html += `<button class="slot ${on ? "on" : ""}" data-k="${k}" ${dis ? "disabled" : ""} onclick="tapSlot(${k})" aria-label="slot ${k}">${on || "&nbsp;"}</button>`;
+        if (k < sl.toks.length) html += `<span class="tok">${esc(sl.toks[k])}</span>`;
+      }
+      html += `</div>`;
+      if (sl.good) html += `<div class="ok-line">${sl.good}</div>`;
+      html += sl.msg ? `<div id="feedback" class="feedback coach">${sl.msg}</div>` : "";
+      html += `<div class="alt"><button class="link" id="mBack" onclick="coachPick('menu')">← Other ways to fix it</button></div>`;
+    }
+    return html + hintBlock();
+  }
+  if (s.rewrite && d) html += `<div class="micro-note" id="rewriteNote">Start with ${esc(NOUNOP[d.X.op].replace(/^the /, "the "))}: write <b>${esc(nameOp(d.X))}</b> first, then finish the expression.</div>`;
+  html += `<div class="ask">Type the expression for the <span class="hlw">highlighted words</span>.<small>Use the keys for × ÷ ( ). Typing x or * gives ×, and / gives ÷.</small></div>`;
+  html += typedBox("typeIn", s.typedText, "checkTyped()") + keypad("typeIn");
+  html += `<div class="alt"><button class="link" id="choicesBtn" onclick="showChoices()">Show choices instead</button></div>`;
+  return html + coachBlock() + hintBlock();
+}
+function findParentName(d) {
+  const s = P.steps[idx], par = d.X ? (function f(n) { if (n.t !== "bin") return null; if (n.l.id === d.X.id || n.r.id === d.X.id) return n; return f(n.l) || f(n.r); })(P.nodes[s.id]) : null;
+  if (!par) return null;
+  const O = par.l.id === d.X.id ? par.r : par.l;
+  return O.t === "bin" ? null : exprText(O);
+}
+function typedWordsHTML(s, coachBlock, hintBlock) {
+  if (s.accepted) return `<div class="ok-line" id="okLine">${s.okMsg}</div>`;
+  let html = `<div class="ask">Type the words for the <span class="hlw">whole expression</span>.<small>Use math words like “the sum of”, “times”, “less than”, and “then”.</small></div>`;
+  html += typedBox("wordsIn", s.typedText, "checkWords()", true);
+  html += `<div class="alt"><button class="link" id="choicesBtn" onclick="showChoices()">Show choices instead</button></div>`;
+  return html + coachBlock() + hintBlock();
+}
+
 /* ---------- rendering ---------- */
 function doneSet() { const d = new Set(); for (let i = 0; i < idx; i++) { const s = P.steps[i]; if (s.type === "gate" && s.id) d.add(s.id); if (s.type === "gate" && s.final) P.order.forEach(id => d.add(id)); } return d; }
 function wordsHTML(o) {
@@ -1537,6 +2009,7 @@ function wordsHTML(o) {
   const add = (id, cls) => { const sp = P.sp[id]; if (sp && sp[1] > sp[0]) marks.push([sp[0], sp[1], cls]); };
   if (o.done) for (const id of o.done) if (id !== o.target) add(id, "x-done");
   if (o.target) add(o.target, "x-target");
+  if (o.focus) add(o.focus, "x-focus");
   if (o.flag) for (const i of o.flag) marks.push([i, i + 1, "x-flag"]);
   marks.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
   const badgeAt = {};
@@ -1563,13 +2036,14 @@ function lineFor(s, cur) { // what that step put on paper (cur: the line being w
     const gp = new Set(groupKids(P.nodes[s.id]).map(c => c.id));      // the ( ) added on this line stay coloured
     return { html: exprHTML(P.nodes[s.id], Object.assign({ gp }, d ? { done: d } : {})), words: false, node: s.id };
   }
-  return { html: esc(pieceWords(P, s.id)), words: true };
+  return { html: esc(P.myWords && s.id === P.order[P.order.length - 1] ? P.myWords : pieceWords(P, s.id)), words: true };
 }
 function renderProblem(s) {
   const done = doneSet();
   let o = { done };
   if (["piece", "words"].concat(MICRO).includes(s.type)) o.target = s.id;
   if (s.type === "rev") o.flag = revWords(P, s.id).marks;
+  if (s.type === "piece" && s.rewrite && s.flag && s.flag.X) o.focus = s.flag.X.id;
   if (s.type === "gate" && s.id) o.target = s.id;
   if (s.type === "sense" || s.type === "done") o = { badges: P.rank };
   if (s.type === "mcas" || (s.type === "gate" && s.final)) o = {};
@@ -1600,8 +2074,8 @@ function render() {
   renderPaper(s);
   const box = document.getElementById("step");
   let html = "";
-  const hs = hintsFor(P, s), shown = s.hints || 0;
-  const hintBlock = () => shown ? `<div class="hints">${hs.slice(0, shown).map(h => `<div class="hintline"><span class="tag">${h.tag}</span>${h.text}</div>`).join("")}</div>` : "";
+  const hs = hintsUI(s), shown = s.hints || 0;
+  const hintBlock = () => shown ? `<div class="hints">${hs.slice(0, shown).map(h => h.sandbox ? sandboxHTML(s) : `<div class="hintline"><span class="tag">${h.tag}</span>${h.text}</div>`).join("")}</div>` : "";
   const coachBlock = () => s.coach ? `<div id="feedback" class="feedback coach">${s.coach}</div>` : `<div id="feedback" class="feedback"></div>`;
   const check = `<label class="gate-check"><input type="checkbox" id="gateBox" onchange="gateTapped(this)" onkeydown="if(event.key==='Enter'){this.checked=true;gateTapped(this)}"> I wrote it</label>`;
   const gatesBefore = P.steps.slice(0, idx).filter(t => t.type === "gate" || t.type === "copy").length;
@@ -1641,12 +2115,18 @@ function render() {
     if (pv && pv.type === "order" && pv.id === s.id) notes.push(`✓ <b class="expr">${esc(exprText(P.nodes[s.id].l))}</b> comes first in the words, so it goes first.`);
     if (s.remind === "rev") { const r = revWords(P, s.id); notes.push(`Remember: ${r.name} flips the order (${r.example}).`); }
     if (s.remind === "order") notes.push("Remember: for − and ÷, keep the order the words say.");
-    if (notes.length) html += `<div class="micro-note">${notes.join("<br>")}</div>`;
-    html += `<div class="ask">What do the <span class="hlw">highlighted words</span> mean?<small>Pick what you would write.</small></div>`;
-    html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
+    if (notes.length && !s.accepted && !s.cm) html += `<div class="micro-note">${notes.join("<br>")}</div>`;
+    if (s.mode === "type") html += typedPieceHTML(s, coachBlock, hintBlock);
+    else {
+      html += `<div class="ask">What do the <span class="hlw">highlighted words</span> mean?<small>Pick what you would write.</small></div>`;
+      html += choiceButtons(s, optsFor(s), false, false) + coachBlock() + hintBlock();
+    }
   } else if (s.type === "words") {
-    html += `<div class="ask">Which words match the <span class="hlw">highlighted part</span>?</div>`;
-    html += choiceButtons(s, optsFor(s), true, false) + coachBlock() + hintBlock();
+    if (s.mode === "type") html += typedWordsHTML(s, coachBlock, hintBlock);
+    else {
+      html += `<div class="ask">Which words match the <span class="hlw">highlighted part</span>?</div>`;
+      html += choiceButtons(s, optsFor(s), true, false) + coachBlock() + hintBlock();
+    }
   } else if (s.type === "first") {
     const first = !P.steps.slice(0, idx).some(t => t.type === "words");
     html += `<div class="ask">${first ? "Which part do you do first?" : "Which part comes next?"}<small>That's the part to put into words ${first ? "first" : "next"}.</small></div>`;
@@ -1661,6 +2141,11 @@ function render() {
     let did = "✓ Correct!";
     if (prev && prev.swapped) did += ` <span style="font-weight:normal">Both ways mean the same thing — you can multiply in either order.</span>`;
     if (s.mc) did = `✓ Correct! It's choice ${"ABCD"[optsFor(prev).indexOf(P.mcChoice)]}.`;
+    if (prev && prev.accepted) {
+      did = prev.okMsg;
+      if (prev.accepted.tree && !prev.accepted.asTyped) did += ` <span style="font-weight:normal">Yours means the same thing. Write it like this:</span>`;
+      if (prev.implicitTyped) did += ` <span style="font-weight:normal">Write the × sign — don't leave it out.</span>`;
+    }
     html += `<div class="did">${did}</div><div class="gate-head">✏️ Write this on your paper</div>`;
     html += `<div class="gate-text">${gatesBefore ? "Write it on the next line:" : "Write it on the first line:"}</div>`;
     html += `<div class="gate-line expr ${l.words ? "wline" : ""}">${l.html}</div>`;
@@ -1680,10 +2165,12 @@ function render() {
     html += `<div class="ask">🤔 Read it back. Does the order of operations in ${P.dir === "w2e" ? "your expression" : "the expression"} match the order of the words?</div>`;
     html += `<div class="sense"><div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "Your expression" : "The expression"}</span><div class="expr">${exprHTML(wt, { badges: P.rank })}</div></div>`;
     html += `<div class="sense-row"><span class="lbl">In GEMDAS order, it says</span><div class="readback" id="readback">${rb.map(r => `<div><span class="ordw">${CIRC[r.k]}</span> ${esc(r.text)}</div>`).join("")}</div></div>`;
-    html += `<div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "The words" : "Your words"}</span><div class="words">${wordsHTML({ badges: P.rank })}</div></div></div>`;
+    html += `<div class="sense-row"><span class="lbl">${P.dir === "w2e" ? "The words" : "Your words"}</span><div class="words">${P.myWords ? esc(P.myWords) : wordsHTML({ badges: P.rank })}</div></div></div>`;
     if (P.roughNo) html += `<div id="feedback" class="feedback coach">Look again — compare step ① in the read-back with ① in the words, then ②${P.order.length > 2 ? ", and so on" : ""}. Each step should be the same kind of math with the same numbers.</div>`;
     html += `<div class="input-area"><button class="yn" id="yesBtn" onclick="answerSense(true)">Matches the words</button><button class="yn secondary" id="noBtn" onclick="answerSense(false)">Doesn't match</button></div>`;
   }
+  const top = topMistake();
+  if (top && ["piece", "words", "first", "mcas"].concat(MICRO).includes(s.type)) html += `<div class="watch" id="watch">👀 Today I'm watching for: ${MIST_NAME[top]}</div>`;
   box.innerHTML = html;
   box.classList.toggle("hidden", s.type === "done");
   box.classList.toggle("gate", s.type === "gate" || s.type === "copy");
@@ -1692,7 +2179,7 @@ function render() {
   if (s.type === "done") {
     fin.classList.remove("hidden");
     const head = P.revealed ? "Finished! This one doesn't count because you saw the solution. Try the next one on your own 💪" : "🎉 You did it! Does your paper match?";
-    const w = `<i>${esc(fullWords(P))}</i>`, e = `<span class="expr">${exprHTML(writtenTree())}</span>`;
+    const w = `<i>${esc(P.myWords || fullWords(P))}</i>`, e = `<span class="expr">${exprHTML(writtenTree())}</span>`;
     fin.innerHTML = `<div style="font-size:1rem;font-weight:normal;margin-bottom:6px">${head}</div><div class="pair-final">${P.dir === "w2e" ? w + "<br>→ " + e : e + "<br>→ " + w}</div>`
       + (P.reasonOk && !P.revealed ? `<div class="reason-ok"><span class="big-check">✓</span><span>The order matches!</span></div>` : "")
       + (P.fadedNow ? `<div class="faded-note">You're on a roll! Hints will stay out of the way now. Tap 💡 Hint any time you want one.</div>` : "")
@@ -1714,7 +2201,9 @@ function render() {
   document.getElementById("bar").style.width = Math.round(100 * idx / total) + "%";
   document.getElementById("progress").textContent = s.type === "done" ? `Solved: ${S.solved} · In a row: ${S.streak}` : `Step ${idx + 1} of ${total}`;
 
-  const focusEl = document.getElementById("gateBox") || document.getElementById("yesBtn") || document.querySelector(".choice:not(:disabled)") || document.getElementById("nextBtn");
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;   // phones: don't pop the keyboard by itself
+  const typeEl = coarse ? null : (hs[shown - 1] && hs[shown - 1].sandbox ? document.getElementById("sandIn") : null) || document.getElementById("typeIn") || document.getElementById("wordsIn");
+  const focusEl = document.getElementById("gateBox") || document.getElementById("yesBtn") || typeEl || document.querySelector(".choice:not(:disabled), .menu-btn, .slot:not(:disabled)") || document.getElementById("nextBtn");
   if (focusEl && !solOpen) focusEl.focus({ preventScroll: true });
   const target = s.type === "done" ? fin : document.getElementById("controls");
   if (!solOpen && target.getBoundingClientRect().bottom > window.innerHeight) target.scrollIntoView({ block: "end", behavior: "smooth" });
